@@ -1,9 +1,9 @@
 bl_info = {
-	"name": "Advanced Transform :)",
+	"name": "Advanced Transform",
 	"location": "View3D > Add > Object > Transform,",
 	"description": "Auto set axis constrain",
 	"author": "Vladislav Kindushov",
-	"version": (0, 1),
+	"version": (0, 2),
 	"blender": (2, 7, 8),
 	"category": "Object",
 }
@@ -16,18 +16,16 @@ from mathutils import Vector, Matrix
 from bpy.props import IntProperty
 from bpy.types import Operator, Macro
 from bpy.props import IntProperty, FloatProperty
+from mathutils.geometry import intersect_line_plane
+import numpy as np
+import math
+import time
 
-
-
-
-#--------------------------Утилиты для получения координат-----------------------------------------#
-#--------------------------------------------------------------------------------------------------#
-
-#-------		For fix looping	-----------#
+#-------		For fix looping -----------#
 
 def UserPresets(self, context, chen):
 	global save_user_drag
-	#bpy_p1athy.app.binar
+	#bpy.app.binary_path
 
 	if chen == True:
 		save_user_drag = context.user_preferences.edit.use_drag_immediately
@@ -37,46 +35,7 @@ def UserPresets(self, context, chen):
 	elif chen == False:
 		context.user_preferences.edit.use_drag_immediately = save_user_drag
 
-#-------		Get 3D world coordinate mouse position	-----------#
-
-def GetCoordMouse(self, context, event):
-	'''Get Coordinate Mouse in 3d view'''
-	#scene = context.scene
-	region = context.region
-	rv3d = context.region_data
-	coord = event.mouse_region_x, event.mouse_region_y
-	#rv3d.view_rotation * Vector((0.0, 0.0, -1.0))
-	view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-	loc = view3d_utils.region_2d_to_location_3d(region, rv3d, coord, view_vector)
-	return loc
-
-#-------		Get 3D world coordinate mouse position		-------#
-
-def GetSelfCoordMouse(self, context, event):
-	'''Get User Coordinate Mouse in 3d view'''
-	#scene = context.scene
-	region = context.region
-	rv3d = context.region_data
-
-	coord = event.mouse_region_x, event.mouse_region_y
-	if context.space_data.transform_orientation == 'LOCAL':
-		user_matrix = GetObjMatrix(self, context)
-	else:
-		user_matrix = CreateOrientation(self, context)
-
-	view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-	loc = view3d_utils.region_2d_to_location_3d(region, rv3d, coord, view_vector)
-	loc = user_matrix.inverted() * loc
-	return loc
-
-#--------			Get matrix object			NOT USE		-------#
-
-def GetObjMatrix(self, context):
-	act_obj = context.active_object
-	matrix_obj = act_obj.matrix_world
-	return matrix_obj
-
-# --------			Create transform orientation			-------#
+# --------  		Create transform orientation			-------#
 
 def CreateOrientation(self, context):
 	'''Create new Transform Orientation'''
@@ -91,7 +50,7 @@ def CreateOrientation(self, context):
 
 	return user_matrix
 
-#--------			Delete self addon orientation 			-------#
+#--------   		Delete self addon orientation   		-------#
 
 def DeleteOrientation(self, context,):
 	'''Delete self addon orientation'''
@@ -105,74 +64,62 @@ def DeleteOrientation(self, context,):
 	except:
 		return {'FINISHED'}
 
-# --------			Get axis for only transform				-------#
+#---------  			Get user snap setting   			-------#
 
-def SetupAxis(self, temp_loc_first, temp_loc_last):
+def GetUserSnap(self, context):
+	global snap_user
+	global user_snap_element
+	global user_snap_target
+	global user_snap_rot
+	global user_snap_project
+	global user_snap
 
-	first_x = temp_loc_first[0]
-	first_y = temp_loc_first[1]
-	first_z = temp_loc_first[2]
+	user_snap_element = context.scene.tool_settings.snap_element
+	user_snap_target =  context.scene.tool_settings.snap_target
+	user_snap_rot = 	context.scene.tool_settings.use_snap_align_rotation
+	user_snap_project = context.scene.tool_settings.use_snap_project
+	user_snap = 		context.scene.tool_settings.use_snap
 
-	last_x = temp_loc_last[0]
-	last_y = temp_loc_last[1]
-	last_z = temp_loc_last[2]
+#---------  			Set user snap setting   			-------#
 
-	x = first_x - last_x
-	if x < 0:
-		x = -x
-	y = first_y - last_y
-	if y < 0:
-		y = -y
-	z = first_z - last_z
-	if z < 0:
-		z = -z
+def SetUserSnap(self, context):
+	context.scene.tool_settings.snap_element =  			user_snap_element
+	context.scene.tool_settings.snap_target =   			user_snap_target
+	context.scene.tool_settings.use_snap_align_rotation =   user_snap_rot
+	context.scene.tool_settings.use_snap_project =  		user_snap_project
+	context.scene.tool_settings.use_snap =  				user_snap
 
-	if x > y and x > z:
-		return 'x'
-	elif y > x and y > z:
-		return 'y'
-	elif z > x and z > y:
-		return 'z'
+# --------- 			Set snap setting  for move  		-------#
 
-# --------			Save user transform orientation			-------#
+def SnapMoveOrientation(self, context):
+	context.scene.tool_settings.snap_element =  			'FACE'
+	context.scene.tool_settings.snap_target =   			'CENTER'
+	context.scene.tool_settings.use_snap_align_rotation =   True
+	context.scene.tool_settings.use_snap_project =  		True
+	context.scene.tool_settings.use_snap =  				True
+
+# --------  		Save user transform orientation 		-------#
 
 def SaveOrientation(self, context):
 	global user_orient
 	user_orient = bpy.context.space_data.transform_orientation
+	print("orinent",user_orient)
 	return user_orient
 
-# --------			Set user transform orientation			-------#
 
-def SetOrientation(self, context, user_orient):
-	print(user_orient)
-	context.space_data.transform_orientation = user_orient
 
-# --------			Get global camera direction 			-------#
-
-def GlobalVectorFallowView(self, context, event):
-	#scene = context.scene
+def getView(context, event):
+	"""Get Viewport Vector""" 
 	region = context.region
 	rv3d = context.region_data
-	coord = event.mouse_region_x, event.mouse_region_y
-	view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
 	return rv3d.view_rotation * Vector((0.0, 0.0, -1.0))
 
-# --------			Get user camera direction 				-------#
-
-def SelfVectorFallowView(self, context, event):
-	#scene = context.scene
-	region = context.region
-	rv3d = context.region_data
-	coord = event.mouse_region_x, event.mouse_region_y
-	view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-	view_vector = rv3d.view_rotation * Vector((-0.0, 0.0, 0.5))
-	user_matrix = CreateOrientation(self, context)
-	user_matrix = user_matrix.inverted() * view_vector
-	return user_matrix
-
-# --------			Get axis for Exclude transform			-------#
-
-def ExcludeAxis(self, context, vector):
+def CreateMatrixByView(self, context, event):
+	vector = getView(context, event)
+	if self.matrix:
+		vector = self.matrix.to_3x3().inverted() * vector
+	else:
+		self.matrix = Matrix()
 	x = vector[0]
 	if x < 0:
 		x = -x
@@ -184,60 +131,227 @@ def ExcludeAxis(self, context, vector):
 		z = -z
 
 	if x > y and x > z:
-		return 'x'
+		self.g_matrix = Matrix.Translation(self.center) * (Matrix(self.matrix.to_3x3() * Matrix.Rotation(1.570796,3,Vector((0.0,1.0,0.0)))).to_4x4())
+		self.exc_axis = 'x'
 	elif y > x and y > z:
-		return 'y'
+		self.g_matrix = Matrix.Translation(self.center) * (Matrix(self.matrix.to_3x3() * Matrix.Rotation(1.570796,3,Vector((1.0,0.0,0.0)))).to_4x4())
+		self.exc_axis = 'y'
 	elif z > x and z > y:
+		self.g_matrix = Matrix.Translation(self.center) * (Matrix(self.matrix.to_3x3() * Matrix.Rotation(1.570796,3,Vector((0.0,0.0,1.0)))).to_4x4())
+		self.exc_axis = 'z'
+	
+
+def draw_callback_px(self, context):
+	try:
+		mw = self.g_matrix
+	
+
+		scale = 1.0
+		bgl.glEnable(bgl.GL_BLEND)
+		bgl.glColor4f(0.471938, 0.530946, 0.8, 0.06)
+		bgl.glBegin(bgl.GL_POLYGON)
+	
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale * Vector((1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale * Vector((-1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale * Vector((-1.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale * Vector((1.0,-1.0,0.0))))))
+		bgl.glEnd()
+	
+	
+		#bgl.glEnable(bgl.GL_BLEND)
+		bgl.glLineWidth(1.0)
+		bgl.glBegin(bgl.GL_LINES)
+		bgl.glColor4f(1, 1, 1, 0.1)
+	
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.8,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.8,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.6,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.6,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.4,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.4,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.2,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.2,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.2,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.2,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.4,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.4,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.6,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.6,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.8,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.8,-1.0,0.0))))))
+		bgl.glColor4f(1, 1, 1, 0.1)
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.8,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.8,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.6,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.6,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.4,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.4,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.2,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.2,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-0.2,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-0.2,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-0.4,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-0.4,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-0.6,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-0.6,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-0.8,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-0.8,0.0))))))
+		bgl.glEnd()
+		bgl.glLineWidth(0.6)
+		bgl.glBegin(bgl.GL_LINES)
+	
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-1.0,0.0))))))
+	
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-1.0,0.0))))))
+	
+	
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,1.0,0.0))))))
+	
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-1.0,0.0))))))
+	
+		bgl.glEnd()
+	
+		# bgl.glBegin(bgl.GL_POLYGON)
+		# bgl.glColor3f(1.0, 0.0, 0.0)
+		# steps= 40
+		# for step in range(steps):
+		#     a = (math.pi * 2 / steps) * step
+		#     glVertex3f(*(mw * Vector((0 + radius * math.cos(a), 0 + radius * math.sin(a), 0.0))))
+		# glEnd()
+	
+	
+		bgl.glEnd()
+	
+		# restore opengl defaults
+		bgl.glLineWidth(1)
+		bgl.glDisable(bgl.GL_BLEND)
+		bgl.glColor4f(0.0, 0.0, 0.0, 1.0)
+	except:
+		pass
+	
+def draw_callback_rot(self, context):
+	##try:
+	mw = self.g_matrix
+	vec = None
+	vec2 = None
+	point1 = None
+	point2 = None
+	point3 = None
+	bgl.glEnable(bgl.GL_BLEND)
+	if not self.temp_loc_first is None:
+		point1 = self.center.copy()
+		vec = (self.temp_loc_first.copy() - self.center.copy()).normalized()
+		point2 = point1.copy()
+		point2 += vec * 3
+		point3 = point1.copy()
+		vec2 = (self.temp_loc_last.copy() - self.center.copy()).normalized()
+		point3 += vec2 * 3
+		
+		axis_dst = Vector((0.0, 1.0, 0.0))
+		matrix_rotate = Matrix.Rotation(1.570796,3,Vector((0.0,0.0,1.0))).to_4x4() * (axis_dst.rotation_difference(self.g_matrix.to_3x3().inverted() * (vec * 1.570796)).to_matrix().to_4x4())
+		mw = mw * matrix_rotate
+
+		bgl.glEnable(bgl.GL_BLEND)
+		bgl.glColor4f(1, 1, 1, 0.5)
+		
+		bgl.glLineWidth(1)
+		bgl.glBegin(bgl.GL_LINES)
+		
+		
+		bgl.glVertex3f(*point1)
+		bgl.glVertex3f(*point2)
+		
+		bgl.glVertex3f(*point1)
+		bgl.glVertex3f(*point3)
+		bgl.glEnd()
+		
+		angl = math.degrees(vec.angle(vec2))
+		
+		bgl.glBegin(bgl.GL_POLYGON)
+		bgl.glColor4f(0.471938, 0.530946, 0.8, 0.2)
+		radius = 3
+		steps = 360
+		bgl.glVertex3f(*self.center)
+		
+		v = (mw * (Vector((0 + radius * math.cos((math.pi * 2 / steps) * (round(angl)+1)), 0 + radius * math.sin((math.pi * 2 / steps) * (round(angl)+1)), 0.0))))
+		
+		if (point3 - v).length > 0.01:
+			i = round(angl) + 1
+			b = 360
+			while b != 360-i:
+				a = (math.pi * 2 / steps) * b
+				bgl.glVertex3f(*(mw * (Vector((0 + radius * math.cos(a), 0 + radius * math.sin(a), 0.0)))))
+				b -= 1
+			bgl.glEnd()
+			
+				
+		else:
+			for step in range((round(angl)+1)):
+				a = (math.pi * 2 / steps) * step
+				bgl.glVertex3f(*(mw * (Vector((0 + radius * math.cos(a), 0 + radius * math.sin(a), 0.0)))))
+			bgl.glEnd()
+	
+	else:
+		bgl.glBegin(bgl.GL_POLYGON)
+		bgl.glColor4f(0.471938, 0.530946, 0.8, 0.2)
+		radius = 3
+		steps= 90
+		bgl.glVertex3f(*self.center)
+		for step in range(46):
+			a = (math.pi * 2 / steps) * step
+		bgl. glVertex3f(* (mw *(Vector((0 + radius * math.cos(a), 0 + radius * math.sin(a), 0.0)))))
+		bgl.glEnd()
+	#
+	# 	# restore opengl defaults
+	bgl.glLineWidth(1)
+	bgl.glDisable(bgl.GL_BLEND)
+	bgl.glColor4f(0.0, 0.0, 0.0, 1.0)
+	#except:
+	#pass
+
+def GetCoordMouse(self, context, event, point=None, matrix=None, revers=False):
+	""" 
+	convert mouse pos to 3d point over plane defined by origin and normal 
+	"""
+	point = self.center
+	matrix = self.g_matrix
+	# get the context arguments
+	region = bpy.context.region
+	rv3d = bpy.context.region_data
+	coord = event.mouse_region_x, event.mouse_region_y
+	view_vector_mouse = view3d_utils.region_2d_to_vector_3d(region, rv3d,coord)
+	ray_origin_mouse = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
+	loc = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse, point, matrix.to_3x3() * Vector((0.0,0.0,1.0)), False)
+	return loc
+
+# --------  		Get axis for only transform 			-------#
+
+def SetupAxis(self, temp_loc_first, temp_loc_last):
+	vec = (self.matrix.to_3x3().inverted() * (temp_loc_last - temp_loc_first).normalized())
+
+	if abs(vec[0]) > abs(vec[1]) and abs(vec[0]) > abs(vec[2]):
+		return 'x'
+	elif abs(vec[1]) > abs(vec[0]) and abs(vec[1]) > abs(vec[2]):
+		return 'y'
+	elif abs(vec[2]) > abs(vec[0]) and abs(vec[2]) > abs(vec[1]):
 		return 'z'
-
-#--------- 				Get user snap setting				-------#
-
-def GetUserSnap(self, context):
-	global snap_user
-	# if context.scene.tool_settings.snap_element == ('VERTEX'):
-	# 	snap_user = 'VERTEX'
-	# elif context.scene.tool_settings.snap_element == ('EDGE'):
-	# 	snap_user = 'EDGE'
-	# elif context.scene.tool_settings.snap_element == ('FACE'):
-	# 	snap_user = 'FACE'
-	# elif context.scene.tool_settings.snap_element == ('VOLUME'):
-	# 	snap_user = 'VOLUME'
-	# else:
-	# 	snap_user = 'INCREMENT'
-	global user_snap_element
-	global user_snap_target
-	global user_snap_rot
-	global user_snap_project
-	global user_snap
-
-	user_snap_element = context.scene.tool_settings.snap_element
-	user_snap_target = 	context.scene.tool_settings.snap_target
-	user_snap_rot =		context.scene.tool_settings.use_snap_align_rotation
-	user_snap_project = context.scene.tool_settings.use_snap_project
-	user_snap = 		context.scene.tool_settings.use_snap
-
-#--------- 				Set user snap setting				-------#
-
-def SetUserSnap(self, context):
-	context.scene.tool_settings.snap_element =				user_snap_element
-	context.scene.tool_settings.snap_target =				user_snap_target
-	context.scene.tool_settings.use_snap_align_rotation = 	user_snap_rot
-	context.scene.tool_settings.use_snap_project =			user_snap_project
-	context.scene.tool_settings.use_snap = 					user_snap
-
-# --------- 			Set snap setting  for move			-------#
-
-def SnapMoveOrientation(self, context):
-	context.scene.tool_settings.snap_element = 				'FACE'
-	context.scene.tool_settings.snap_target = 				'CENTER'
-	context.scene.tool_settings.use_snap_align_rotation = 	True
-	context.scene.tool_settings.use_snap_project = 			True
-	context.scene.tool_settings.use_snap = 					True
+	
 
 
-
-#----------------------------------------Class move------------------------------------------------#
-#--------------------------------------------------------------------------------------------------#
+def Zoom(self, context):
+	ar = None
+	for i in bpy.context.window.screen.areas:
+		if i.type == 'VIEW_3D': ar = i
+	ar = ar.spaces[0].region_3d.view_distance
+	return ar
 
 class AdvancedMove(Operator):
 	''' Advanced move '''
@@ -267,100 +381,95 @@ class AdvancedMove(Operator):
 
 		# --------список для отправки--------#
 
+		#---------Основная матрица-----------#
+		self.matrix = None
+		
+		#----------Матрица для отрисовки плейна----------#
+		self.g_matrix = None
+		
+		# ----------Ось для исключения----------#
+		self.exc_axis = None
+		self.axis= None
+
 		self.buffer = {'tool':'move','mode': '1', 'axis': '1'}
 		self.LB = False
-		self.RB = False
 		self.MB = False
+		self.RB = False
 		self.SPACE = False
-		self.mode = None
+		self.mode=None
 
 	@classmethod
 	def poll(cls, context):
 		return context.space_data.type == "VIEW_3D"
 
-	def GiveOptions(self):
-		return self.buffer
-
-
-
 	def modal(self, context, event):
-#-----------------------LEFT_MOUSE Only Axis Move-------------------------------------------------------------#
-
+		context.area.tag_redraw()
+		CreateMatrixByView(self, context, event)
+		
+# -----------------------LEFT_MOUSE Only Axis Move-------------------------------------------------------------#
+		
 		if event.type == 'LEFTMOUSE' or self.LB:
+			if self.temp_loc_first is None:
+				self.temp_loc_first = GetCoordMouse(self, context, event)
 			self.LB = True
 			if event.value == 'PRESS':
 				#self.onlyAxis = False
-				if self.count_step <= 8:
+				if self.count_step <= 2:
 					self.count_step += 1
-					print(self.count_step)
 					return {'RUNNING_MODAL'}
 				else:
-					if self.user_orientation != 'GLOBAL':
-						self.temp_loc_last = GetSelfCoordMouse(self, context, event)
-					else:
-						self.temp_loc_last = GetCoordMouse(self, context, event)
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					self.temp_loc_last = GetCoordMouse(self, context, event)
 					self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
 					SetConstarin.SetMoveOnly(self, context, self.axis)
-					bpy.context.space_data.transform_orientation = user_orient
 					return {'RUNNING_MODAL'}
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
+				bpy.context.space_data.transform_orientation = self.user_orientation
 				DeleteOrientation(self, context)
-				bpy.context.space_data.transform_orientation = user_orient
 				return {'FINISHED'}
-				#elif event.typwe == 'RIGHTMOUSE':
-				#elif event.type == 'MIDLEMOUSE':
-
-#-----------------------RIGHT_MOUSE Exlude Axis-------------------------------------------------------------#
-
+		
+# -----------------------RIGHT_MOUSE Exlude Axis-------------------------------------------------------------#
+		
 		elif event.type == 'RIGHTMOUSE' or self.RB:
 			if event.value == 'PRESS':
 				self.RB = True
-
-
-				if self.user_orientation == 'GLOBAL':
-					vector = GlobalVectorFallowView(self, context, event)
-				else:
-					vector = SelfVectorFallowView(self, context, event)
-
-				self.axis = ExcludeAxis(self, context, vector)
-				SetConstarin.SetMoveExclude(self, context, self.axis)
-
+				SetConstarin.SetMoveExclude(self, context, self.exc_axis)
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				DeleteOrientation(self, context)
-				bpy.context.space_data.transform_orientation = user_orient
+				bpy.context.space_data.transform_orientation = self.user_orientation
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 				return {'FINISHED'}
-
-#-----------------------MIDDLE_MOUSE No Constrain-------------------------------------------------------------#
-
+				
+# -----------------------MIDDLE_MOUSE No Constrain-------------------------------------------------------------#
+		
 		elif event.type == 'MIDDLEMOUSE' or self.MB:
 			self.MB = True
-			print("chika 1")
 			if event.value == 'PRESS':
-				print("chika 2")
 				SetConstarin.SetMoveNoConstrain(self, context)
-
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				DeleteOrientation(self, context)
 				bpy.context.space_data.transform_orientation = user_orient
 				return {'FINISHED'}
-
-#-----------------------SPACEBAR Bottom			-------------------------------------------------------------#
-
+				
+# -----------------------SPACEBAR Bottom			-------------------------------------------------------------#
+		
 		elif event.type == 'SPACE' or self.SPACE:
 			self.SPACE = True
 			if event.value == 'PRESS':
 				SnapMoveOrientation(self, context)
 				SetConstarin.SetMoveNoConstrain(self, context)
 				return {'RUNNING_MODAL'}
-
+			
 			elif event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				SetUserSnap(self, context)
 				return {'FINISHED'}
-
+			
 		if event.type == 'ESC':
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
@@ -368,227 +477,105 @@ class AdvancedMove(Operator):
 	def invoke(self, context, event):
 		if context.space_data.type == 'VIEW_3D':
 			self.user_orientation = SaveOrientation(self, context)
-
-			if self.user_orientation == 'VIEW' or self.user_orientation == 'GIMBAL':
-				bpy.ops.transform.translate('INVOKE_DEFAULT')
-				return {'FINISHED'}
-
 			GetUserSnap(self, context)
 			UserPresets(self, context, True)
-
-
-
-			if self.user_orientation != 'GLOBAL':
-				self.temp_loc_first = GetSelfCoordMouse(self, context, event)
+			
+			if context.mode == "EDIT_MESH":
+				# ob = bpy.context.active_object
+				# count = len(ob.data.vertices)
+				# sel = np.zeros(count, dtype=np.bool)
+				# ob.data.vertices.foreach_get('select', sel)
+				# if True in sel:
+					temp = context.scene.cursor_location.copy()
+					bpy.ops.view3d.snap_cursor_to_selected()
+					self.center = context.scene.cursor_location.copy()
+					context.scene.cursor_location = temp
+					
+					if self.user_orientation == 'GLOBAL':
+						pass
+					elif self.user_orientation == 'VIEW' or self.user_orientation == 'GIMBAL':
+						bpy.ops.transform.translate('INVOKE_DEFAULT')
+					elif self.user_orientation == 'LOCAL':
+						self.matrix = bpy.context.active_object.matrix_world
+					elif self.user_orientation == 'NORMAL':
+						self.matrix = CreateOrientation(self, context)
+					else:
+						self.matrix = Matrix.Translation(self.center) * context.scene.orientations[self.user_orientation].matrix.to_4x4().copy()
+				# else:
+				# 	self.report({'WARNING'}, "Not select elements")
+				# 	return {'CANCELLED'}
 			else:
-				self.temp_loc_first = GetCoordMouse(self, context, event)
+				if context.active_object:
+					pass
+				else:
+					if len(bpy.context.selected_objects):
+						bpy.context.scene.objects.active = bpy.context.selected_objects[0]
+					else:
+						self.report({'WARNING'}, "Not select objects")
+						return {'CANCELLED'}
+					
+				self.center = bpy.context.active_object.matrix_world * (1 / 8 * sum((Vector(b) for b in bpy.context.active_object.bound_box), Vector()))
+				if self.user_orientation == 'GLOBAL':
+					pass
+				elif self.user_orientation == 'VIEW' or self.user_orientation == 'GIMBAL':
+					bpy.ops.transform.translate('INVOKE_DEFAULT')
+					return {'FINISHED'}
+				elif self.user_orientation == 'LOCAL' or self.user_orientation == 'NORMAL':
+					self.matrix = context.active_object.matrix_world
+				else:
+					self.matrix = Matrix.Translation(self.center) * context.scene.orientations[self.user_orientation].matrix.to_4x4().copy()
+				
+				
+			CreateMatrixByView(self, context, event)
+			
 
-				print("podlec")
+			args = (self, context)
+			self._handle = bpy.types.SpaceView3D.draw_handler_add(draw_callback_px, args, 'WINDOW', 'POST_VIEW')
 			context.window_manager.modal_handler_add(self)
 			return {'RUNNING_MODAL'}
 		else:
 			self.report({'WARNING'}, "Active space must be a View3d")
 			return {'CANCELLED'}
-
-# --------------------------------------Class rotation----------------------------------------------#
-# --------------------------------------------------------------------------------------------------#
-
-class AdvancedRotation(Operator):
-	''' Advanced move '''
-	bl_idname = "view3d.advancedrotation"
-	bl_label = "Advanced Rotation"
-	bl_options = {'REGISTER', 'UNDO'}
-
-	def __init__(self):
-
-
-		#--------дает время для более точного определения выбора оси--------#
-		self.count_step_positive = 15
-		self.count_step_negative = -15
-		self.last_rot = None
-		# --------что бы дважды не нажимать левую кнопку--------#
-		self.onlyAxis = True
-
-		# --------Хранит пользовательскую ориентацию--------#
-		self.user_orientation = None
-
-		# --------Хранит пользовательскую ориентацию--------#
-		self.axsis = None
-
-		# --------мод инструмента--------#
-		self.mode = None
-
-		# --------список для отправки--------#
-
-		self.buffer = {'tool':'2','mode': '1', 'axis': '1'}
-
-		# --------Для снапинга--------#
-		self.snap_user = None
-
-		self.LB = False
-		self.LB_cal = True
-		self.RB = False
-		self.MB = False
-		self.RB_cal = True
-		self.SPACE = False
-
-		self.first_mouse_x = IntProperty()
-		self.first_value = FloatProperty()
-		self.delta = 0
-
-	@classmethod
-	def poll(cls, context):
-		return context.space_data.type == "VIEW_3D"
-
-	def modal(self, context, event):
-		if event.type == 'LEFTMOUSE' or self.LB:
-			if event.value == 'PRESS':
-				self.LB = True
-
-
-
-				if self.user_orientation == 'GLOBAL':
-					vector = GlobalVectorFallowView(self, context, event)
-				else:
-					vector = SelfVectorFallowView(self, context, event)
-
-				self.axis = ExcludeAxis(self, context, vector)
-
-				if self.LB_cal:
-					self.LB_cal = False
-					SetConstarin.SetRotationOnly(self, context, self.axis)
-
-				return {'RUNNING_MODAL'}
-			if event.value == 'RELEASE':
-				UserPresets(self, context, False)
-				SetUserSnap(self, context)
-				DeleteOrientation(self, context)
-				bpy.context.space_data.transform_orientation = user_orient
-				return {'FINISHED'}
-
-
-
-		elif event.type == 'RIGHTMOUSE' or self.RB:
-			if event.value == 'PRESS':
-				self.RB = True
-
-				if self.user_orientation == 'GLOBAL':
-					vector = GlobalVectorFallowView(self, context, event)
-				else:
-					vector = SelfVectorFallowView(self, context, event)
-
-				self.axis = ExcludeAxis(self, context, vector)
-
-				self.delta = (self.first_mouse_x - event.mouse_x)
-				print(self.delta)
-
-
-
-				# if self.last_rot == 0 and self.last_rot != None:
-				# 	if self.last_rot == 'n':
-				# 		SetConstarin.SetRotationOnlyStepgNegative(self, context, self.axis)
-				# 	elif self.last_rot == 'p':
-				# 		SetConstarin.SetRotationOnlyStepgPositive(self, context, self.axis)
-
-				if self.delta >= 35:
-					#self.count_step_positive = self.delta
-					#self.first_mouse_x = event.mouse_x
-					#self.delta = self.first_mouse_x
-					self.first_mouse_x = event.mouse_x
-					self.last_rot = 'n'
-					SetConstarin.SetRotationOnlyStepgNegative(self, context, self.axis)
-					print('Ferst - ',self.delta, 'two - ',self.first_mouse_x  )
-				elif self.delta <= -35:
-					#self.count_step_negative = self.delta - self.delta - self.delta
-					#self.first_mouse_x = event.mouse_x
-					#self.delta = self.first_mouse_x
-					self.first_mouse_x = event.mouse_x
-					self.last_rot = 'p'
-					SetConstarin.SetRotationOnlyStepgPositive(self, context, self.axis)
-
-
-					print('thre - ', self.delta, 'for - ', self.first_mouse_x)
-
-				return {'RUNNING_MODAL'}
-
-
-
-			if event.value == 'RELEASE':
-				UserPresets(self, context, False)
-				SetUserSnap(self, context)
-				DeleteOrientation(self, context)
-				bpy.context.space_data.transform_orientation = user_orient
-				return {'FINISHED'}
-
-		if event.type == 'ESC':
-			return {'CANCELLED'}
-		return {'RUNNING_MODAL'}
-
-	def invoke(self, context, event):
-		if context.space_data.type == 'VIEW_3D':
-			self.user_orientation = SaveOrientation(self, context)
-
-			if self.user_orientation == 'VIEW' or self.user_orientation == 'GIMBAL':
-				bpy.ops.transform.rotate('INVOKE_DEFAULT')
-				return {'FINISHED'}
-
-			UserPresets(self, context, True)
-			GetUserSnap(self, context)
-			context.scene.tool_settings.snap_element = 'INCREMENT'
-
-
-			#
-			# if self.user_orientation == 'GLOBAL':
-			# 	vector = GlobalVectorFallowView(self, context, event)
-			# else:
-			# 	vector = SelfVectorFallowView(self, context, event)
-			# print(self.user_orientation)
-			# self.axis = ExcludeAxis(self, context, vector)
-			#
-			# SetConstarin.SetRotationOnly(self, context, self.axis)
-			#
-			# SetUserSnap(self, context)
-			#
-			# DeleteOrientation(self, context)
-			# bpy.context.space_data.transform_orientation = user_orient
-			self.first_mouse_x = event.mouse_x
-			context.window_manager.modal_handler_add(self)
-			return {'RUNNING_MODAL'}
-		else:
-			self.report({'WARNING'}, "Active space must be a View3d")
-			return {'CANCELLED'}
-
-# --------------------------------------Class Scale----------------------------------------------#
-# --------------------------------------------------------------------------------------------------#
+		
 
 class AdvancedScale(Operator):
 	''' Advanced Scale '''
 	bl_idname = "view3d.advancedscale"
 	bl_label = "Advanced Scale"
 	bl_options = {'REGISTER', 'UNDO'}
-
+	
 	def __init__(self):
 		# --------Ппеременые для дхраниея координат курсора--------#
 		self.temp_loc_first = None
 		self.temp_loc_last = None
-
+		
 		# --------дает время для более точного определения выбора оси--------#
 		self.count_step = 0
-
+		
 		# --------что бы дважды не нажимать левую кнопку--------#
 		self.onlyAxis = True
-
+		
 		# --------Хранит пользовательскую ориентацию--------#
 		self.user_orientation = None
-
+		
 		# --------Хранит пользовательскую ориентацию--------#
 		self.axsis = None
-
+		
 		# --------мод инструмента--------#
 		self.mode = None
-
+		
 		# --------список для отправки--------#
-
+		
+		# ---------Основная матрица-----------#
+		self.matrix = None
+		
+		# ----------Матрица для отрисовки плейна----------#
+		self.g_matrix = None
+		
+		# ----------Ось для исключения----------#
+		self.exc_axis = None
+		self.axis = None
+		
 		self.buffer = {'tool': 'move', 'mode': '1', 'axis': '1'}
 		self.LB = False
 		self.RB = False
@@ -607,64 +594,56 @@ class AdvancedScale(Operator):
 
 
 	def modal(self, context, event):
+		context.area.tag_redraw()
+		CreateMatrixByView(self, context, event)
+		
 # -----------------------LEFT_MOUSE Only Axis Move-------------------------------------------------------------#
-
+		
 		if event.type == 'LEFTMOUSE' or self.LB:
+			if self.temp_loc_first is None:
+				self.temp_loc_first = GetCoordMouse(self, context, event)
 			self.LB = True
 			if event.value == 'PRESS':
-				# self.onlyAxis = False
-				if self.count_step <= 8:
+				if self.count_step <= 2:
 					self.count_step += 1
-					print(self.count_step)
 					return {'RUNNING_MODAL'}
 				else:
-					if self.user_orientation != 'GLOBAL':
-						self.temp_loc_last = GetSelfCoordMouse(self, context, event)
-					else:
-						self.temp_loc_last = GetCoordMouse(self, context, event)
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					self.temp_loc_last = GetCoordMouse(self, context, event)
 					self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
 					SetConstarin.SetScaleOnly(self, context, self.axis)
-
-					if event.type == 'SPACE':# and event.value == 'PRESS':
-						SetConstarin.SetScaleOnlySetZero(self, context, self.axis)
-						print("ZERO")
-
-					bpy.context.space_data.transform_orientation = user_orient
 					return {'RUNNING_MODAL'}
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
+				bpy.context.space_data.transform_orientation = self.user_orientation
 				DeleteOrientation(self, context)
-				bpy.context.space_data.transform_orientation = user_orient
+				
 				return {'FINISHED'}
 
 # -----------------------RIGHT_MOUSE Exlude Axis-------------------------------------------------------------#
-
+		
+		
+		
 		elif event.type == 'RIGHTMOUSE' or self.RB:
 			if event.value == 'PRESS':
 				self.RB = True
-				if self.user_orientation == 'GLOBAL':
-					vector = GlobalVectorFallowView(self, context, event)
-				else:
-					vector = SelfVectorFallowView(self, context, event)
-
-				self.axis = ExcludeAxis(self, context, vector)
-				SetConstarin.SetScaleExclude(self, context, self.axis)
+				SetConstarin.SetScaleExclude(self, context, self.exc_axis)
 
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				DeleteOrientation(self, context)
-				bpy.context.space_data.transform_orientation = user_orient
+				bpy.context.space_data.transform_orientation = self.user_orientation
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 				return {'FINISHED'}
 
 # -----------------------MIDDLE_MOUSE No Constrain-------------------------------------------------------------#
-
+		
 		elif event.type == 'MIDDLEMOUSE' or self.MB:
 			self.MB = True
-			print("chika 1")
 			if event.value == 'PRESS':
-				print("chika 2")
 				SetConstarin.SetScaleNoConstrain(self, context)
-
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				DeleteOrientation(self, context)
@@ -672,92 +651,283 @@ class AdvancedScale(Operator):
 				return {'FINISHED'}
 
 # -----------------------SPACEBAR Bottom Setup zero-------------------------------------------------------------#
-
+		
 		elif event.type == 'SPACE' or self.SPACE:
+			if self.temp_loc_first is None:
+				self.temp_loc_first = GetCoordMouse(self, context, event)
 			self.SPACE = True
 			if event.value == 'PRESS':
-				if self.count_step <= 8:
+				# self.onlyAxis = False
+				if self.count_step <= 2:
 					self.count_step += 1
-					print(self.count_step)
 					return {'RUNNING_MODAL'}
 				else:
-					if self.user_orientation != 'GLOBAL':
-						self.temp_loc_last = GetSelfCoordMouse(self, context, event)
-					else:
-						self.temp_loc_last = GetCoordMouse(self, context, event)
+					self.temp_loc_last = GetCoordMouse(self, context, event)
 					self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
-					#SetConstarin.SetScaleOnly(self, context, self.axis)
-
-
-					if self.SPACE_cal:
-						self.SPACE_cal = False
-						SetConstarin.SetScaleOnlySetZero(self, context, self.axis)
-					bpy.context.space_data.transform_orientation = user_orient
-					return {'RUNNING_MODAL'}
-			if event.value == 'RELEASE':
-				UserPresets(self, context, False)
-				DeleteOrientation(self, context)
-				bpy.context.space_data.transform_orientation = user_orient
-				return {'FINISHED'}
+					print('AXIS', self.axsis)
+					SetConstarin.SetScaleOnlySetZero(self, context, self.axis)
+					return {'FINISHED'}
 
 # -----------------------ALT for negative value-------------------------------------------------------------#
 
 		elif event.type == 'BUTTON4MOUSE' or self.ALT:
+			if self.temp_loc_first is None:
+				self.temp_loc_first = GetCoordMouse(self, context, event)
 			self.ALT = True
 			if event.value == 'PRESS':
-				if self.count_step <= 8:
+				# self.onlyAxis = False
+				if self.count_step <= 2:
 					self.count_step += 1
-					print(self.count_step)
 					return {'RUNNING_MODAL'}
 				else:
-					if self.user_orientation != 'GLOBAL':
-						self.temp_loc_last = GetSelfCoordMouse(self, context, event)
-					else:
-						self.temp_loc_last = GetCoordMouse(self, context, event)
+					self.temp_loc_last = GetCoordMouse(self, context, event)
 					self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
-					self.ALT = False
-					if self.ALT == False:
-						SetConstarin.SetScaleOnlySetNegative(self, context, self.axis)
-
-					bpy.context.space_data.transform_orientation = user_orient
-					return {'RUNNING_MODAL'}
-			if event.value == 'RELEASE':
-				UserPresets(self, context, False)
-				DeleteOrientation(self, context)
-				bpy.context.space_data.transform_orientation = user_orient
-				return {'FINISHED'}
+					SetConstarin.SetScaleOnlySetNegative(self, context, self.axis)
+					return {'FINISHED'}
+	
 
 
 		if event.type == 'ESC':
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
-
+	
 	def invoke(self, context, event):
 		if context.space_data.type == 'VIEW_3D':
-
 			self.user_orientation = SaveOrientation(self, context)
-			if self.user_orientation == 'VIEW' or self.user_orientation == 'GIMBAL':
-				bpy.ops.transform.resize('INVOKE_DEFAULT')
-				return {'FINISHED'}
-
 			GetUserSnap(self, context)
 			UserPresets(self, context, True)
-
-
-
-			if self.user_orientation != 'GLOBAL':
-				self.temp_loc_first = GetSelfCoordMouse(self, context, event)
+			
+			if context.mode == "EDIT_MESH":
+				# ob = bpy.context.active_object
+				# count = len(ob.data.vertices)
+				# sel = np.zeros(count, dtype=np.bool)
+				# ob.data.vertices.foreach_get('select', sel)
+				# if True in sel:
+				temp = context.scene.cursor_location.copy()
+				bpy.ops.view3d.snap_cursor_to_selected()
+				self.center = context.scene.cursor_location.copy()
+				context.scene.cursor_location = temp
+				
+				if self.user_orientation == 'GLOBAL':
+					pass
+				elif self.user_orientation == 'VIEW' or self.user_orientation == 'GIMBAL':
+					bpy.ops.transform.translate('INVOKE_DEFAULT')
+				elif self.user_orientation == 'LOCAL':
+					self.matrix = bpy.context.active_object.matrix_world
+				elif self.user_orientation == 'NORMAL':
+					self.matrix = CreateOrientation(self, context)
+				else:
+					self.matrix = Matrix.Translation(self.center) * context.scene.orientations[
+						self.user_orientation].matrix.to_4x4().copy()
+				# else:
+				# 	self.report({'WARNING'}, "Not select elements")
+				# 	return {'CANCELLED'}
 			else:
-				self.temp_loc_first = GetCoordMouse(self, context, event)
-
-				print("podlec")
+				if context.active_object:
+					pass
+				else:
+					if len(bpy.context.selected_objects):
+						bpy.context.scene.objects.active = bpy.context.selected_objects[0]
+					else:
+						self.report({'WARNING'}, "Not select objects")
+						return {'CANCELLED'}
+				
+				self.center = bpy.context.active_object.matrix_world * (
+				1 / 8 * sum((Vector(b) for b in bpy.context.active_object.bound_box), Vector()))
+				if self.user_orientation == 'GLOBAL':
+					pass
+				elif self.user_orientation == 'VIEW' or self.user_orientation == 'GIMBAL':
+					bpy.ops.transform.translate('INVOKE_DEFAULT')
+					return {'FINISHED'}
+				elif self.user_orientation == 'LOCAL' or self.user_orientation == 'NORMAL':
+					self.matrix = context.active_object.matrix_world
+				else:
+					self.matrix = Matrix.Translation(self.center) * context.scene.orientations[
+						self.user_orientation].matrix.to_4x4().copy()
+			
+			CreateMatrixByView(self, context, event)
+			
+			args = (self, context)
+			self._handle = bpy.types.SpaceView3D.draw_handler_add(draw_callback_px, args, 'WINDOW', 'POST_VIEW')
 			context.window_manager.modal_handler_add(self)
 			return {'RUNNING_MODAL'}
 		else:
 			self.report({'WARNING'}, "Active space must be a View3d")
 			return {'CANCELLED'}
 
+
+class AdvancedRotation(Operator):
+	''' Advanced move '''
+	bl_idname = "view3d.advancedrotation"
+	bl_label = "Advanced Rotation"
+	bl_options = {'REGISTER', 'UNDO'}
+	
+	def __init__(self):
+		
+		# --------дает время для более точного определения выбора оси--------#
+		self.count_step_positive = 15
+		self.count_step_negative = -15
+		self.last_rot = None
+		self.temp_loc_first= None
+		self.temp_loc_last = None
+		# --------что бы дважды не нажимать левую кнопку--------#
+		self.onlyAxis = True
+		
+		# --------Хранит пользовательскую ориентацию--------#
+		self.user_orientation = None
+		
+		# --------Хранит пользовательскую ориентацию--------#
+		self.axsis = None
+		
+		# --------мод инструмента--------#
+		self.mode = None
+		
+		# --------список для отправки--------#
+		
+		self.buffer = {'tool': '2', 'mode': '1', 'axis': '1'}
+		
+		# --------Для снапинга--------#
+		self.snap_user = None
+		
+		# ---------Основная матрица-----------#
+		self.matrix = None
+		
+		# ----------Матрица для отрисовки плейна----------#
+		self.g_matrix = None
+		
+		# ----------Ось для исключения----------#
+		self.exc_axis = None
+		self.axis = None
+		
+		self.LB = False
+		self.LB_cal = True
+		self.RB = False
+		self.MB = False
+		self.RB_cal = True
+		self.SPACE = False
+		
+		self.first_mouse_x = IntProperty()
+		self.first_value = FloatProperty()
+		self.delta = 0
+	
+	@classmethod
+	def poll(cls, context):
+		return context.space_data.type == "VIEW_3D"
+	
+	def modal(self, context, event):
+		context.area.header_text_set(('Time' + str(self.time - time.clock())))
+		if event.type == 'LEFTMOUSE' or self.LB:
+			self.temp_loc_last = GetCoordMouse(self, context, event)
+			if self.temp_loc_first is None:
+				self.temp_loc_first = GetCoordMouse(self, context, event)
+			if event.value == 'PRESS':
+				self.LB = True
+				if self.LB_cal:
+					self.LB_cal = False
+					self.temp_loc_last = GetCoordMouse(self, context, event)
+					SetConstarin.SetRotationOnly(self, context, self.exc_axis)
+				
+				return {'RUNNING_MODAL'}
+			if event.value == 'RELEASE':
+				UserPresets(self, context, False)
+				SetUserSnap(self, context)
+				DeleteOrientation(self, context)
+				bpy.context.space_data.transform_orientation = user_orient
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				
+				return {'FINISHED'}
+		
+		
+		
+		elif event.type == 'RIGHTMOUSE' or self.RB:
+			if self.temp_loc_first is None:
+				self.temp_loc_first = GetCoordMouse(self, context, event)
+			if event.value == 'PRESS':
+				self.RB = True
+				self.delta = (self.first_mouse_x - event.mouse_x)
+				if self.delta >= 35:
+					self.first_mouse_x = event.mouse_x
+					self.last_rot = 'n'
+					SetConstarin.SetRotationOnlyStepgNegative(self, context, self.axis)
+				elif self.delta <= -35:
+					self.first_mouse_x = event.mouse_x
+					self.last_rot = 'p'
+					SetConstarin.SetRotationOnlyStepgPositive(self, context, self.axis)
+				return {'RUNNING_MODAL'}
+			
+			if event.value == 'RELEASE':
+				UserPresets(self, context, False)
+				SetUserSnap(self, context)
+				DeleteOrientation(self, context)
+				bpy.context.space_data.transform_orientation = user_orient
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+
+				return {'FINISHED'}
+		
+		if event.type == 'ESC':
+			return {'CANCELLED'}
+		return {'RUNNING_MODAL'}
+	
+	def invoke(self, context, event):
+		self.time = time.clock()
+		if context.space_data.type == 'VIEW_3D':
+			self.user_orientation = SaveOrientation(self, context)
+			GetUserSnap(self, context)
+			UserPresets(self, context, True)
+			
+			if context.mode == "EDIT_MESH":
+				temp = context.scene.cursor_location.copy()
+				bpy.ops.view3d.snap_cursor_to_selected()
+				self.center = context.scene.cursor_location.copy()
+				context.scene.cursor_location = temp
+				
+				if self.user_orientation == 'GLOBAL':
+					pass
+				elif self.user_orientation == 'VIEW' or self.user_orientation == 'GIMBAL':
+					bpy.ops.transform.translate('INVOKE_DEFAULT')
+				elif self.user_orientation == 'LOCAL':
+					self.matrix = bpy.context.active_object.matrix_world
+				elif self.user_orientation == 'NORMAL':
+					self.matrix = CreateOrientation(self, context)
+				else:
+					self.matrix = Matrix.Translation(self.center) * context.scene.orientations[
+						self.user_orientation].matrix.to_4x4().copy()
+			else:
+				if context.active_object:
+					pass
+				else:
+					if len(bpy.context.selected_objects):
+						bpy.context.scene.objects.active = bpy.context.selected_objects[0]
+					else:
+						self.report({'WARNING'}, "Not select objects")
+						return {'CANCELLED'}
+				
+				self.center = bpy.context.active_object.matrix_world * (
+					1 / 8 * sum((Vector(b) for b in bpy.context.active_object.bound_box), Vector()))
+				if self.user_orientation == 'GLOBAL':
+					pass
+				elif self.user_orientation == 'VIEW' or self.user_orientation == 'GIMBAL':
+					bpy.ops.transform.translate('INVOKE_DEFAULT')
+					return {'FINISHED'}
+				elif self.user_orientation == 'LOCAL' or self.user_orientation == 'NORMAL':
+					self.matrix = context.active_object.matrix_world
+				else:
+					self.matrix = Matrix.Translation(self.center) * context.scene.orientations[
+						self.user_orientation].matrix.to_4x4().copy()
+			
+			CreateMatrixByView(self, context, event)
+			
+			args = (self, context)
+			self._handle = bpy.types.SpaceView3D.draw_handler_add(draw_callback_rot, args, 'WINDOW', 'POST_VIEW')
+			context.window_manager.modal_handler_add(self)
+			return {'RUNNING_MODAL'}
+		else:
+			self.report({'WARNING'}, "Active space must be a View3d")
+			return {'CANCELLED'}
+
+
 #_______________Класс для выбора констрейнов по полученым аргументам--------------------------------#
+
 
 class SetConstarin(Operator):
 	#-----------Constrain for move-----------#
@@ -774,11 +944,11 @@ class SetConstarin(Operator):
 		return result
 
 	def SetMoveExclude(self, context, axis):
-		if self.axis == 'x':
+		if self.exc_axis == 'x':
 			bpy.ops.transform.translate('INVOKE_DEFAULT', constraint_axis=(False, True, True))
-		elif self.axis == 'y':
+		elif self.exc_axis == 'y':
 			bpy.ops.transform.translate('INVOKE_DEFAULT', constraint_axis=(True, False, True))
-		elif self.axis == 'z':
+		elif self.exc_axis == 'z':
 			bpy.ops.transform.translate('INVOKE_DEFAULT', constraint_axis=(True, True, False))
 		return {'FINISHED'}
 
@@ -789,11 +959,11 @@ class SetConstarin(Operator):
 	# --------Constrain for rotation----------#
 
 	def SetRotationOnly(self,context,axis):
-		if self.axis == 'x':
+		if self.exc_axis == 'x':
 			bpy.ops.transform.rotate('INVOKE_DEFAULT', constraint_axis=(True, False, False))
-		elif self.axis == 'y':
+		elif self.exc_axis == 'y':
 			bpy.ops.transform.rotate('INVOKE_DEFAULT', constraint_axis=(False, True, False))
-		elif self.axis == 'z':
+		elif self.exc_axis == 'z':
 			bpy.ops.transform.rotate('INVOKE_DEFAULT', constraint_axis=(False, False, True))
 		return {'FINISHED'}
 
@@ -809,11 +979,11 @@ class SetConstarin(Operator):
 		return {'FINISHED'}
 
 	def SetScaleExclude(self, context, axis):
-		if self.axis == 'x':
+		if self.exc_axis == 'x':
 			bpy.ops.transform.resize('INVOKE_DEFAULT', constraint_axis=(False, True, True))
-		elif self.axis == 'y':
+		elif self.exc_axis == 'y':
 			bpy.ops.transform.resize('INVOKE_DEFAULT', constraint_axis=(True, False, True))
-		elif self.axis == 'z':
+		elif self.exc_axis == 'z':
 			bpy.ops.transform.resize('INVOKE_DEFAULT', constraint_axis=(True, True, False))
 		return {'FINISHED'}
 
@@ -854,7 +1024,7 @@ class SetConstarin(Operator):
 		return {'FINISHED'}
 
 	#-----------Advanced rotation Constrain-----------#
-	#-----------Step rotation 45----------#
+	#-----------Step rotation 45----------#52jh
 
 
 	def SetRotationOnlyStepgNegative(self,context,axis):
@@ -875,81 +1045,8 @@ class SetConstarin(Operator):
 			bpy.ops.transform.rotate(value=-0.785398, constraint_axis=(False, False, True))
 		return {'FINISHED'}
 
-
-#----------------------------------Class Clear orientation for macro--------------------------------#
-
-class Clear(Operator):
-	bl_idname = "view3d.clear"
-	bl_label = "Clear Orintation"
-
-	@classmethod
-	def poll(cls, context):
-		return context.space_data.type == "VIEW_3D"
-
-	def execute(self, context):
-		DeleteOrientation(self, context)
-		SetOrientation(self, context, user_orient)
-		#print("CLEAR")
-		return {'FINISHED'}
-
-# ----------------------------------Class macro-----------------------------------------#
-
-class TransformMacro(Macro):
-	bl_idname = 'transform_macro'
-	bl_label = 'Transform Macro'
-
-	'''def execute(self, context):
-		bpy.utils.register_class(AdvancedMove)
-		bpy.utils.register_class(Clear)
-		bpy.utils.register_class(TransformMacro)
-
-		TransformMacro.define(view3d.advancedmove)
-		TransformMacro.define(view3d.clear)
-		return {'FINISHED'}'''
-
-
-# class AdvancedTransform(bpy.types.AddonPreferences):
-# 	bl_idname = __name__
-# 	some_prop = bpy.types.KeyMapItem.type = 'NONE'
-#
-# 	def draw(self, context):
-# 		layout = self.layout
-# 		layout.prop(self, "some_prop")
-
-# class AddonPreferences(bpy.types.AddonPreferences):
-# 	bl_idname = __name__
-#
-# 	def draw(self, context):
-# 		layout = self.layout
-# 		wm = bpy.context.window_manager
-# 		box = layout.box()
-# 		split = box.split()
-# 		col = split.column()
-# 		col.label('Setup Pie menu Hotkey')
-# 		col.separator()
-# 		wm = bpy.context.window_manager
-# 		kc = wm.keyconfigs.user
-# 		km = kc.keymaps['3D View Generic']
-# 		kmi = get_hotkey_entry_item(km, 'wm.call_menu_pie', 'pie.test_pie_menu')
-# 		if kmi:
-# 			col.context_pointer_set("keymap", km)
-# 			rna_keymap_ui.draw_kmi([], kc, km, kmi, col, 0)
-# 		else:
-# 			col.label("No hotkey entry found")
-# 			col.operator(Template_Add_Hotkey.bl_idname, text="Add hotkey entry", icon='ZOOMIN')
-
-
-
 def register():
 	bpy.utils.register_module(__name__)
-	kc = bpy.context.window_manager.keyconfigs.addon
-	if kc:
-		km = kc.keymaps.new(name="3D View", space_type="VIEW_3D")
-		kmi = km.keymap_items.new(AdvancedMove.bl_idname, 'G', 'PRESS', )
-		kmi = km.keymap_items.new('view3d.advancedrotation', 'R', 'PRESS', )
-		kmi = km.keymap_items.new('view3d.advancedscale', 'S', 'PRESS', )
-
-
 def unregister():
 	bpy.utils.unregister_module(__name__)
 
