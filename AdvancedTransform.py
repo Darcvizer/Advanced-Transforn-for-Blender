@@ -19,7 +19,6 @@ from bpy.props import IntProperty, FloatProperty
 from mathutils.geometry import intersect_line_plane
 import numpy as np
 import math
-import time
 
 #-------		For fix looping -----------#
 
@@ -146,15 +145,16 @@ def draw_callback_px(self, context):
 		mw = self.g_matrix
 	
 
-		scale = 1.0
+		scale = 2.0
+		zoom_scale = 3.0
 		bgl.glEnable(bgl.GL_BLEND)
 		bgl.glColor4f(0.471938, 0.530946, 0.8, 0.06)
 		bgl.glBegin(bgl.GL_POLYGON)
 	
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale * Vector((1.0,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale * Vector((-1.0,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale * Vector((-1.0,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale * Vector((1.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale * Vector((1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale * Vector((-1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale * Vector((-1.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale * Vector((1.0,-1.0,0.0))))))
 		bgl.glEnd()
 	
 	
@@ -163,59 +163,59 @@ def draw_callback_px(self, context):
 		bgl.glBegin(bgl.GL_LINES)
 		bgl.glColor4f(1, 1, 1, 0.1)
 	
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.8,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.8,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.6,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.6,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.4,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.4,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.2,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.2,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.0,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((0.0,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.2,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.2,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.4,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.4,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.6,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.6,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.8,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-0.8,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.8,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.8,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.6,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.6,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.4,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.4,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.2,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.2,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((0.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-0.2,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-0.2,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-0.4,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-0.4,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-0.6,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-0.6,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-0.8,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-0.8,-1.0,0.0))))))
 		bgl.glColor4f(1, 1, 1, 0.1)
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.8,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.8,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.6,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.6,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.4,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.4,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.2,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.2,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,0.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,0.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-0.2,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-0.2,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-0.4,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-0.4,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-0.6,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-0.6,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-0.8,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-0.8,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,0.8,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,0.8,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,0.6,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,0.6,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,0.4,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,0.4,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,0.2,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,0.2,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,0.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,0.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,-0.2,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,-0.2,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,-0.4,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,-0.4,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,-0.6,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,-0.6,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,-0.8,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,-0.8,0.0))))))
 		bgl.glEnd()
 		bgl.glLineWidth(0.6)
 		bgl.glBegin(bgl.GL_LINES)
 	
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,-1.0,0.0))))))
 	
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,-1.0,0.0))))))
 	
 	
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,1.0,0.0))))))
 	
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((1.0,-1.0,0.0))))))
-		bgl.glVertex3f(*(mw *((Zoom(self, context)/2)*(scale *Vector((-1.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((1.0,-1.0,0.0))))))
+		bgl.glVertex3f(*(mw *((Zoom(self, context)/zoom_scale)*(scale *Vector((-1.0,-1.0,0.0))))))
 	
 		bgl.glEnd()
 	
@@ -236,9 +236,10 @@ def draw_callback_px(self, context):
 		bgl.glColor4f(0.0, 0.0, 0.0, 1.0)
 	except:
 		pass
-	
+
+
 def draw_callback_rot(self, context):
-	try:
+	#try:
 		mw = self.g_matrix
 		vec = None
 		vec2 = None
@@ -248,37 +249,40 @@ def draw_callback_rot(self, context):
 		bgl.glEnable(bgl.GL_BLEND)
 		if not self.temp_loc_first is None:
 			point1 = self.center.copy()
-			vec = (self.temp_loc_first.copy() - self.center.copy()).normalized()
+			vec = (self.temp_loc_first - self.center).normalized()
 			point2 = point1.copy()
-			point2 += (Zoom(self, context)/3)*vec * 1
+			point2 += ((Zoom(self, context) / 3) * vec) * 1
 			point3 = point1.copy()
-			vec2 = (self.temp_loc_last.copy() - self.center.copy()).normalized()
-			point3 += (Zoom(self, context)/3)*vec2 * 1
+			vec2 = (self.temp_loc_last - self.center).normalized()
+			point3 += ((Zoom(self, context) / 3) * vec2) * 1
 			
 			axis_dst = Vector((0.0, 1.0, 0.0))
-			matrix_rotate = Matrix.Rotation(1.570796,3,Vector((0.0,0.0,1.0))).to_4x4() * (axis_dst.rotation_difference(self.g_matrix.to_3x3().inverted() * (vec * 1.570796)).to_matrix().to_4x4())
+			
+			matrix_rotate = Matrix.Rotation(1.570796, 3, Vector((0.0, 0.0, 1.0))).to_4x4() * (
+			axis_dst.rotation_difference(self.g_matrix.to_3x3().inverted() * (vec)).to_matrix().to_4x4())
+			
 			mw = mw * matrix_rotate
-	
+			
 			bgl.glEnable(bgl.GL_BLEND)
 			bgl.glColor4f(1, 1, 1, 0.5)
 			
 			bgl.glLineWidth(1)
 			bgl.glBegin(bgl.GL_LINES)
 			
-			p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data,point1)
+			p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, point1)
 			bgl.glVertex2f(p[0], p[1])
 			p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, point2)
 			bgl.glVertex2f(p[0], p[1])
-			#bgl.glVertex3f(*point1)
-			#bgl.glVertex3f(*point2)
+			# bgl.glVertex3f(*point1)
+			# bgl.glVertex3f(*point2)
 			
-			p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data,point1)
+			p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, point1)
 			bgl.glVertex2f(p[0], p[1])
 			p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, point3)
 			bgl.glVertex2f(p[0], p[1])
 			
-			#bgl.glVertex3f(*point1)
-			#bgl.glVertex3f(*point3)
+			# bgl.glVertex3f(*point1)
+			# bgl.glVertex3f(*point3)
 			bgl.glEnd()
 			
 			angl = math.degrees(vec.angle(vec2))
@@ -289,44 +293,49 @@ def draw_callback_rot(self, context):
 			steps = 360
 			p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, self.center)
 			bgl.glVertex2f(p[0], p[1])
-			#bgl.glVertex3f(*self.center)
+			# bgl.glVertex3f(*self.center)
 			
-			v = (mw * ((Zoom(self, context)/3) * (Vector((0 + radius * math.cos((math.pi * 2 / steps) * (round(angl)+1)), 0 + radius * math.sin((math.pi * 2 / steps) * (round(angl))), 0.0)))))
+			v = (mw * ((Zoom(self, context) / 3) * (Vector((0 + radius * math.cos(
+				(math.pi * 2 / steps) * (round(angl) + 1)), 0 + radius * math.sin(
+				(math.pi * 2 / steps) * (round(angl))), 0.0)))))
 			b = 0
-			i = 361
-
 
 			while True:
+				b += 1
 				a = (math.pi * 2 / steps) * b
-				b+=1
 				temp = mw * ((Zoom(self, context) / 3) * (Vector((0 + radius * math.cos(a), 0 + radius * math.sin(a), 0.0))))
 				p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, temp)
 				bgl.glVertex2f(p[0], p[1])
-				#bgl.glVertex3f(*temp)
-				if (point3 - temp).length < (Zoom(self, context)/3)*0.01 or b == 361 or b == -1:
+				# bgl.glVertex3f(*temp)
+				if (point3 - temp).length < (Zoom(self, context) / 3) * 0.01 or b == 360 or b == 0:
 					break
 			if b != 0:
 				self.temp_agle = b / 15
-
+				
+			
 			bgl.glEnd()
-	
+		
 		else:
 			bgl.glBegin(bgl.GL_POLYGON)
 			bgl.glColor4f(0.471938, 0.530946, 0.8, 0.2)
-			radius = 3
-			steps= 90
+			radius = 1
+			steps = 90
 			bgl.glVertex3f(*self.center)
-			for step in range(46):
+			for step in range(steps):
 				a = (math.pi * 2 / steps) * step
-			bgl. glVertex3f(* (mw *(Vector((0 + radius * math.cos(a), 0 + radius * math.sin(a), 0.0)))))
+				temp = mw * ((Zoom(self, context) / 3) * (Vector((0 + radius * math.cos(a), 0 + radius * math.sin(a), 0.0))))
+				p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, temp)
+				bgl.glVertex2f(p[0], p[1])
+			#bgl.glVertex3f(*(mw * (Vector((0 + radius * math.cos(a), 0 + radius * math.sin(a), 0.0)))))
 			bgl.glEnd()
-		#
+			#context.scene.cursor_location = self.center
 		# 	# restore opengl defaults
+	
 		bgl.glLineWidth(1)
 		bgl.glDisable(bgl.GL_BLEND)
 		bgl.glColor4f(0.0, 0.0, 0.0, 1.0)
-	except:
-		pass
+	#except:
+		#pass
 
 def GetCoordMouse(self, context, event, point=None, matrix=None, revers=False):
 	""" 
@@ -446,11 +455,12 @@ class AdvancedMove(Operator):
 			if event.value == 'PRESS':
 				self.RB = True
 				SetConstarin.SetMoveExclude(self, context, self.exc_axis)
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				DeleteOrientation(self, context)
 				bpy.context.space_data.transform_orientation = self.user_orientation
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				
 				return {'FINISHED'}
 				
 # -----------------------MIDDLE_MOUSE No Constrain-------------------------------------------------------------#
@@ -458,8 +468,11 @@ class AdvancedMove(Operator):
 		elif event.type == 'MIDDLEMOUSE' or self.MB:
 			self.MB = True
 			if event.value == 'PRESS':
-				SetConstarin.SetMoveNoConstrain(self, context)
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				SetConstarin.SetMoveNoConstrainNoSnap(self, context)
+				try:
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				except:
+					pass
 			
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
@@ -471,14 +484,18 @@ class AdvancedMove(Operator):
 		
 		elif event.type == 'SPACE' or self.SPACE:
 			self.SPACE = True
+			
 			if event.value == 'PRESS':
-				SnapMoveOrientation(self, context)
+				#SnapMoveOrientation(self, context)
 				SetConstarin.SetMoveNoConstrain(self, context)
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+
 				return {'RUNNING_MODAL'}
 			
 			elif event.value == 'RELEASE':
 				UserPresets(self, context, False)
-				SetUserSnap(self, context)
+				DeleteOrientation(self, context)
+				#SetUserSnap(self, context)
 				return {'FINISHED'}
 			
 		if event.type == 'ESC':
@@ -661,12 +678,13 @@ class AdvancedScale(Operator):
 			if event.value == 'PRESS':
 				self.RB = True
 				SetConstarin.SetScaleExclude(self, context, self.exc_axis)
-
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				DeleteOrientation(self, context)
 				bpy.context.space_data.transform_orientation = self.user_orientation
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				#bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 				return {'FINISHED'}
 
 # -----------------------MIDDLE_MOUSE No Constrain-------------------------------------------------------------#
@@ -675,8 +693,10 @@ class AdvancedScale(Operator):
 			self.MB = True
 			if event.value == 'PRESS':
 				SetConstarin.SetScaleNoConstrain(self, context)
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-			
+				try:
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				except:
+					pass
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				DeleteOrientation(self, context)
@@ -695,6 +715,8 @@ class AdvancedScale(Operator):
 					self.count_step += 1
 					return {'RUNNING_MODAL'}
 				else:
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+
 					self.temp_loc_last = GetCoordMouse(self, context, event)
 					self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
 					print('AXIS', self.axsis)
@@ -703,7 +725,8 @@ class AdvancedScale(Operator):
 
 # -----------------------ALT for negative value-------------------------------------------------------------#
 
-		elif event.type == 'BUTTON4MOUSE' or self.ALT:
+		#elif event.type == 'BUTTON4MOUSE' or self.ALT:
+		elif event.shift or self.ALT:
 			if self.temp_loc_first is None:
 				self.temp_loc_first = GetCoordMouse(self, context, event)
 			self.ALT = True
@@ -713,6 +736,9 @@ class AdvancedScale(Operator):
 					self.count_step += 1
 					return {'RUNNING_MODAL'}
 				else:
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					if context.mode == "EDIT_MESH":
+						bpy.ops.mesh.flip_normals()
 					self.temp_loc_last = GetCoordMouse(self, context, event)
 					self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
 					SetConstarin.SetScaleOnlySetNegative(self, context, self.axis)
@@ -880,10 +906,13 @@ class AdvancedRotation(Operator):
 				self.temp_loc_first = GetCoordMouse(self, context, event)
 			if event.value == 'PRESS':
 				self.LB = True
+				#context.scene.cursor_location = self.temp_loc_first
+				context.scene.cursor_location = self.temp_loc_first
 				if self.LB_cal:
 					self.LB_cal = False
-					self.temp_loc_last = GetCoordMouse(self, context, event)
+					#self.temp_loc_last = GetCoordMouse(self, context, event)
 					SetConstarin.SetRotationOnly(self, context, self.exc_axis)
+					print(self.temp_loc_first)
 				
 				return {'RUNNING_MODAL'}
 			if event.value == 'RELEASE':
@@ -907,10 +936,11 @@ class AdvancedRotation(Operator):
 				#print('point',int(round(self.temp_agle)))
 				if int(round(self.temp_agle)) in range(0,24) and  (int(round(self.temp_agle)) != int(self.temp)):
 					self.temp = int(round(self.temp_agle))
-					print('SOSOK')
+					#print('SOSOK')
 					if self.exc_axis == 'y':
-						self.temp*=-1
-					self.agle = self.temp
+						self.agle = self.temp * -1
+					else:
+						self.agle = self.temp
 					
 					if self.pre_rot != 0:
 						# if self.pre_rot >self.agle*15:
@@ -1046,6 +1076,10 @@ class SetConstarin(Operator):
 		return {'FINISHED'}
 
 	def SetMoveNoConstrain(self, context):
+		bpy.ops.transform.translate('INVOKE_DEFAULT',snap=True,snap_target='CENTER', snap_align = True)
+		return {'FINISHED'}
+	
+	def SetMoveNoConstrainNoSnap(self, context):
 		bpy.ops.transform.translate('INVOKE_DEFAULT')
 		return {'FINISHED'}
 
@@ -1083,6 +1117,7 @@ class SetConstarin(Operator):
 	def SetScaleNoConstrain(self, context):
 		bpy.ops.transform.resize('INVOKE_DEFAULT')
 		return {'FINISHED'}
+	
 	#-----------Advanced Scale Constrain-----------#
 
 	# -----------Align to 0-----------#
@@ -1148,6 +1183,12 @@ class SetConstarin(Operator):
 
 def register():
 	bpy.utils.register_module(__name__)
+	kc = bpy.context.window_manager.keyconfigs.addon
+	if kc:
+		km = kc.keymaps.new(name="3D View", space_type="VIEW_3D")
+		kmi = km.keymap_items.new(AdvancedMove.bl_idname, 'G', 'PRESS', )
+		kmi = km.keymap_items.new('view3d.advancedrotation', 'R', 'PRESS', )
+		kmi = km.keymap_items.new('view3d.advancedscale', 'S', 'PRESS', )
 def unregister():
 	bpy.utils.unregister_module(__name__)
 
