@@ -11,6 +11,7 @@ bl_info = {
 import bpy
 import blf
 import bgl
+import blf
 from bpy_extras import view3d_utils
 from mathutils import Vector, Matrix
 from bpy.props import IntProperty
@@ -258,8 +259,7 @@ def draw_callback_rot(self, context):
 			
 			axis_dst = Vector((0.0, 1.0, 0.0))
 			
-			matrix_rotate = Matrix.Rotation(1.570796, 3, Vector((0.0, 0.0, 1.0))).to_4x4() * (
-			axis_dst.rotation_difference(self.g_matrix.to_3x3().inverted() * (vec)).to_matrix().to_4x4())
+			matrix_rotate = Matrix.Rotation(1.570796, 3, Vector((0.0, 0.0, 1.0))).to_4x4() * (axis_dst.rotation_difference(self.g_matrix.to_3x3().inverted() * (vec)).to_matrix().to_4x4())
 			
 			mw = mw * matrix_rotate
 			
@@ -288,7 +288,12 @@ def draw_callback_rot(self, context):
 			angl = math.degrees(vec.angle(vec2))
 			
 			bgl.glBegin(bgl.GL_POLYGON)
-			bgl.glColor4f(0.471938, 0.530946, 0.8, 0.2)
+			if self.exc_axis == 'x':
+				bgl.glColor4f(0.8, 0.245542, 0.210406, 0.2)
+			elif self.exc_axis == 'y':
+				bgl.glColor4f(0.265925, 0.8, 0.147502, 0.2)
+			elif self.exc_axis == 'z':
+				bgl.glColor4f(0.471938, 0.530946, 0.8, 0.2)
 			radius = 1
 			steps = 360
 			p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, self.center)
@@ -314,13 +319,38 @@ def draw_callback_rot(self, context):
 				
 			
 			bgl.glEnd()
-		
+			
+			width = None
+			
+			p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, self.center)
+			# for region in bpy.context.area.regions:
+			# 	if region.type == "TOOLS":
+			# 		width = region.width
+			# 		break
+			if self.RB:
+				bgl.glColor4f(1, 1, 1, 0.6)
+				font_id = 0
+				blf.position(font_id, p[0]-10, p[1]+20, 0)
+				blf.size(font_id, 12, 72)
+				blf.draw(font_id, str(round((b / 15))*15))
+			else:
+				bgl.glColor4f(1, 1, 1, 0.6)
+				font_id = 0
+				blf.position(font_id, p[0] - 10, p[1] + 20, 0)
+				blf.size(font_id, 12, 72)
+				blf.draw(font_id, str(b))
+				
 		else:
 			bgl.glBegin(bgl.GL_POLYGON)
-			bgl.glColor4f(0.471938, 0.530946, 0.8, 0.2)
+			if self.exc_axis == 'x':
+				bgl.glColor4f(0.8, 0.245542, 0.210406, 0.2)
+			elif self.exc_axis == 'y':
+				bgl.glColor4f(0.265925, 0.8, 0.147502, 0.2)
+			elif self.exc_axis == 'z':
+				bgl.glColor4f(0.471938, 0.530946, 0.8, 0.2)
 			radius = 1
 			steps = 90
-			bgl.glVertex3f(*self.center)
+			
 			for step in range(steps):
 				a = (math.pi * 2 / steps) * step
 				temp = mw * ((Zoom(self, context) / 3) * (Vector((0 + radius * math.cos(a), 0 + radius * math.sin(a), 0.0))))
@@ -499,6 +529,7 @@ class AdvancedMove(Operator):
 				return {'FINISHED'}
 			
 		if event.type == 'ESC':
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
 
@@ -747,6 +778,7 @@ class AdvancedScale(Operator):
 
 
 		if event.type == 'ESC':
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
 	
@@ -963,6 +995,7 @@ class AdvancedRotation(Operator):
 				return {'FINISHED'}
 		
 		if event.type == 'ESC':
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
 	
@@ -1186,9 +1219,9 @@ def register():
 	kc = bpy.context.window_manager.keyconfigs.addon
 	if kc:
 		km = kc.keymaps.new(name="3D View", space_type="VIEW_3D")
-		kmi = km.keymap_items.new(AdvancedMove.bl_idname, 'G', 'PRESS', )
-		kmi = km.keymap_items.new('view3d.advancedrotation', 'R', 'PRESS', )
-		kmi = km.keymap_items.new('view3d.advancedscale', 'S', 'PRESS', )
+		kmi = km.keymap_items.new(AdvancedMove.bl_idname, 'W', 'PRESS', )
+		kmi = km.keymap_items.new('view3d.advancedrotation', 'E', 'PRESS', )
+		kmi = km.keymap_items.new('view3d.advancedscale', 'R', 'PRESS', )
 def unregister():
 	bpy.utils.unregister_module(__name__)
 
