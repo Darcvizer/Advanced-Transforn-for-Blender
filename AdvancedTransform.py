@@ -12,6 +12,7 @@ import bpy
 import blf
 import bgl
 import blf
+import bmesh
 from bpy_extras import view3d_utils
 from mathutils import Vector, Matrix
 from bpy.props import IntProperty
@@ -259,6 +260,7 @@ def draw_callback_rot(self, context):
 			
 			axis_dst = Vector((0.0, 1.0, 0.0))
 			
+			#matrix_rotate = Matrix.Rotation(1.570796, 3, Vector((0.0, 0.0, 1.0))).to_4x4() * (axis_dst.rotation_difference(self.g_matrix.to_3x3().inverted() * (vec)).to_matrix().to_4x4())
 			matrix_rotate = Matrix.Rotation(1.570796, 3, Vector((0.0, 0.0, 1.0))).to_4x4() * (axis_dst.rotation_difference(self.g_matrix.to_3x3().inverted() * (vec)).to_matrix().to_4x4())
 			
 			mw = mw * matrix_rotate
@@ -312,7 +314,7 @@ def draw_callback_rot(self, context):
 				p = view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data, temp)
 				bgl.glVertex2f(p[0], p[1])
 				# bgl.glVertex3f(*temp)
-				if (point3 - temp).length < (Zoom(self, context) / 3) * 0.01 or b == 360 or b == 0:
+				if (point3 - temp).length < (Zoom(self, context) / 3) * 0.01 or b == 361 or b == 0:
 					break
 			if b != 0:
 				self.temp_agle = b / 15
@@ -407,7 +409,7 @@ class AdvancedMove(Operator):
 	''' Advanced move '''
 	bl_idname = "view3d.advancedmove"
 	bl_label = "Advanced Move"
-	bl_options = {'REGISTER', 'UNDO'}
+	#bl_options = {}
 
 	def __init__(self):
 		#--------Ппеременые для дхраниея координат курсора--------#
@@ -468,7 +470,10 @@ class AdvancedMove(Operator):
 					self.count_step += 1
 					return {'RUNNING_MODAL'}
 				else:
-					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					try:
+						bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					except:
+						pass
 					self.temp_loc_last = GetCoordMouse(self, context, event)
 					self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
 					SetConstarin.SetMoveOnly(self, context, self.axis)
@@ -485,7 +490,10 @@ class AdvancedMove(Operator):
 			if event.value == 'PRESS':
 				self.RB = True
 				SetConstarin.SetMoveExclude(self, context, self.exc_axis)
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				try:
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				except:
+					pass
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				DeleteOrientation(self, context)
@@ -518,8 +526,10 @@ class AdvancedMove(Operator):
 			if event.value == 'PRESS':
 				#SnapMoveOrientation(self, context)
 				SetConstarin.SetMoveNoConstrain(self, context)
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-
+				try:
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				except:
+					pass
 				return {'RUNNING_MODAL'}
 			
 			elif event.value == 'RELEASE':
@@ -529,7 +539,10 @@ class AdvancedMove(Operator):
 				return {'FINISHED'}
 			
 		if event.type == 'ESC':
-			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			try:
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			except:
+				pass
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
 
@@ -554,8 +567,21 @@ class AdvancedMove(Operator):
 					context.scene.cursor_location = temp
 				elif bpy.context.area.spaces[0].pivot_point == 'ACTIVE_ELEMENT':
 					mesh = context.active_object.data
-					self.center = context.active_object, matrix_world * mesh.polygons[
-						mesh.polygons.active].center.copy()
+					bm = bmesh.from_edit_mesh(mesh)
+					try:
+						elem = bm.select_history[-1]
+						if isinstance(elem, bmesh.types.BMVert):
+							self.center = (context.active_object.matrix_world.copy() * elem.co.copy()).copy()
+						
+						elif isinstance(elem, bmesh.types.BMEdge):
+							self.center = context.active_object.matrix_world * (
+							(elem.verts[0].co.copy() + elem.verts[1].co.copy()) / 2).copy()
+						
+						elif isinstance(elem, bmesh.types.BMFace):
+							self.center = context.active_object.matrix_world * elem.calc_center_median().copy()
+					except:
+						self.center = context.active_object.matrix_world * mesh.polygons[
+							mesh.polygons.active].center.copy()
 				
 				#######-------------------Find Derection Axis-------------------######
 				if self.user_orientation == 'GLOBAL':
@@ -623,7 +649,7 @@ class AdvancedScale(Operator):
 	''' Advanced Scale '''
 	bl_idname = "view3d.advancedscale"
 	bl_label = "Advanced Scale"
-	bl_options = {'REGISTER', 'UNDO'}
+	#bl_options = {'REGISTER', 'UNDO'}
 	
 	def __init__(self):
 		# --------Ппеременые для дхраниея координат курсора--------#
@@ -689,7 +715,10 @@ class AdvancedScale(Operator):
 					self.count_step += 1
 					return {'RUNNING_MODAL'}
 				else:
-					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					try:
+						bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					except:
+						pass
 					self.temp_loc_last = GetCoordMouse(self, context, event)
 					self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
 					SetConstarin.SetScaleOnly(self, context, self.axis)
@@ -709,7 +738,10 @@ class AdvancedScale(Operator):
 			if event.value == 'PRESS':
 				self.RB = True
 				SetConstarin.SetScaleExclude(self, context, self.exc_axis)
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				try:
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				except:
+					pass
 			
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
@@ -746,7 +778,10 @@ class AdvancedScale(Operator):
 					self.count_step += 1
 					return {'RUNNING_MODAL'}
 				else:
-					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					try:
+						bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					except:
+						pass
 
 					self.temp_loc_last = GetCoordMouse(self, context, event)
 					self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
@@ -767,7 +802,10 @@ class AdvancedScale(Operator):
 					self.count_step += 1
 					return {'RUNNING_MODAL'}
 				else:
-					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					try:
+						bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+					except:
+						pass
 					if context.mode == "EDIT_MESH":
 						bpy.ops.mesh.flip_normals()
 					self.temp_loc_last = GetCoordMouse(self, context, event)
@@ -778,7 +816,10 @@ class AdvancedScale(Operator):
 
 
 		if event.type == 'ESC':
-			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			try:
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			except:
+				pass
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
 	
@@ -803,8 +844,21 @@ class AdvancedScale(Operator):
 					context.scene.cursor_location = temp
 				elif bpy.context.area.spaces[0].pivot_point == 'ACTIVE_ELEMENT':
 					mesh = context.active_object.data
-					self.center = context.active_object, matrix_world * mesh.polygons[
-						mesh.polygons.active].center.copy()
+					bm = bmesh.from_edit_mesh(mesh)
+					try:
+						elem = bm.select_history[-1]
+						if isinstance(elem, bmesh.types.BMVert):
+							self.center = (context.active_object.matrix_world.copy() * elem.co.copy()).copy()
+						
+						elif isinstance(elem, bmesh.types.BMEdge):
+							self.center = context.active_object.matrix_world * (
+							(elem.verts[0].co.copy() + elem.verts[1].co.copy()) / 2).copy()
+						
+						elif isinstance(elem, bmesh.types.BMFace):
+							self.center = context.active_object.matrix_world * elem.calc_center_median().copy()
+					except:
+						self.center = context.active_object.matrix_world * mesh.polygons[
+							mesh.polygons.active].center.copy()
 				
 				#######-------------------Find Derection Axis-------------------######
 				if self.user_orientation == 'GLOBAL':
@@ -840,8 +894,10 @@ class AdvancedScale(Operator):
 					bpy.ops.view3d.snap_cursor_to_selected()
 					self.center = context.scene.cursor_location.copy()
 					context.scene.cursor_location = temp
+					
 				elif bpy.context.area.spaces[0].pivot_point == 'ACTIVE_ELEMENT':
 					self.center = context.active_object.location.copy()
+				
 				
 				#######-------------------Find Derection Axis-------------------######
 				
@@ -871,7 +927,7 @@ class AdvancedRotation(Operator):
 	''' Advanced move '''
 	bl_idname = "view3d.advancedrotation"
 	bl_label = "Advanced Rotation"
-	bl_options = {'REGISTER', 'UNDO'}
+	#bl_options = {'REGISTER', 'UNDO'}
 	
 	def __init__(self):
 		
@@ -932,6 +988,8 @@ class AdvancedRotation(Operator):
 		return context.space_data.type == "VIEW_3D"
 	
 	def modal(self, context, event):
+		self.temp_loc_last = GetCoordMouse(self, context, event)
+		
 		if event.type == 'LEFTMOUSE' or self.LB:
 			self.temp_loc_last = GetCoordMouse(self, context, event)
 			if self.temp_loc_first is None:
@@ -939,7 +997,6 @@ class AdvancedRotation(Operator):
 			if event.value == 'PRESS':
 				self.LB = True
 				#context.scene.cursor_location = self.temp_loc_first
-				context.scene.cursor_location = self.temp_loc_first
 				if self.LB_cal:
 					self.LB_cal = False
 					#self.temp_loc_last = GetCoordMouse(self, context, event)
@@ -952,7 +1009,10 @@ class AdvancedRotation(Operator):
 				SetUserSnap(self, context)
 				DeleteOrientation(self, context)
 				bpy.context.space_data.transform_orientation = user_orient
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				try:
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				except:
+					pass
 				
 				return {'FINISHED'}
 		
@@ -962,10 +1022,19 @@ class AdvancedRotation(Operator):
 			self.temp_loc_last = GetCoordMouse(self, context, event)
 			if self.temp_loc_first is None:
 				self.temp_loc_first = GetCoordMouse(self, context, event)
+
 			if event.value == 'PRESS':
+				#if not self.RB:
+					#s = context.scene.cursor_location.copy()
+					#context.scene.cursor_location = self.temp_loc_first
+				#context.scene.cursor_location = self.temp_loc_last
 				self.RB = True
-				context.scene.cursor_location = self.temp_loc_first
 				#print('point',int(round(self.temp_agle)))
+				#bpy.ops.transform.rotate(value=0)
+				bpy.context.area.tag_redraw()
+				#bpy.context.scene.update()
+				#bpy.ops.wm.redraw_timer(type='DRAW', iterations=1)
+
 				if int(round(self.temp_agle)) in range(0,24) and  (int(round(self.temp_agle)) != int(self.temp)):
 					self.temp = int(round(self.temp_agle))
 					#print('SOSOK')
@@ -991,11 +1060,17 @@ class AdvancedRotation(Operator):
 				SetUserSnap(self, context)
 				DeleteOrientation(self, context)
 				bpy.context.space_data.transform_orientation = user_orient
-				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				try:
+					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+				except:
+					pass
 				return {'FINISHED'}
 		
 		if event.type == 'ESC':
-			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			try:
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			except:
+				pass
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
 	
@@ -1020,7 +1095,21 @@ class AdvancedRotation(Operator):
 					context.scene.cursor_location = temp
 				elif bpy.context.area.spaces[0].pivot_point == 'ACTIVE_ELEMENT':
 					mesh = context.active_object.data
-					self.center = context.active_object,matrix_world * mesh.polygons[mesh.polygons.active].center.copy()
+					bm = bmesh.from_edit_mesh(mesh)
+					try:
+						elem = bm.select_history[-1]
+						if isinstance(elem, bmesh.types.BMVert):
+							self.center = (context.active_object.matrix_world.copy() * elem.co.copy()).copy()
+							
+						elif isinstance(elem, bmesh.types.BMEdge):
+							self.center = context.active_object.matrix_world * ((elem.verts[0].co.copy() + elem.verts[1].co.copy()) / 2).copy()
+						
+						elif isinstance(elem, bmesh.types.BMFace):
+							self.center = context.active_object.matrix_world * elem.calc_center_median().copy()
+					except:
+						self.center = context.active_object.matrix_world * mesh.polygons[mesh.polygons.active].center.copy()
+						
+					
 				
 				#######-------------------Find Derection Axis-------------------######
 				if self.user_orientation == 'GLOBAL':
