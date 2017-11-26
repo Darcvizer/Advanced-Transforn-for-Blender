@@ -584,6 +584,7 @@ class AdvancedMove(Operator):
 		
 		if event.type == 'ESC':
 			try:
+				context.area.header_text_set()
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 			except:
 				pass
@@ -881,6 +882,7 @@ class AdvancedScale(Operator):
 		
 		if event.type == 'ESC':
 			try:
+				context.area.header_text_set()
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 			except:
 				pass
@@ -1176,6 +1178,7 @@ class AdvancedRotation(Operator):
 		
 		if event.type == 'ESC':
 			try:
+				context.area.header_text_set()
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 			except:
 				pass
