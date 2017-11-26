@@ -1430,6 +1430,9 @@ def register():
 		kmi = km.keymap_items.new(AdvancedMove.bl_idname, 'W', 'PRESS', )
 		kmi = km.keymap_items.new('view3d.advancedrotation', 'E', 'PRESS', )
 		kmi = km.keymap_items.new('view3d.advancedscale', 'R', 'PRESS', )
+		
+		km = kc.keymaps.new('Transform Modal Map', space_type='EMPTY', region_type='WINDOW', modal=True)
+		kmi = km.keymap_items.new_modal('CONFIRM', 'MIDDLEMOUSE', 'RELEASE')
 
 
 def unregister():
