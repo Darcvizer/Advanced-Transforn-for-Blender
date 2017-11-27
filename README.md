@@ -38,11 +38,11 @@ Shift key. Use it to make your selection specular (same thing you do when you sc
 
 **Standard Hotkeys: **
 
-G -  Move
+W -  Move
 
-R -  Rotate
+E -  Rotate
 
-S -  Scale
+R -  Scale
 
 **Advanced Transform v0.2**
 
@@ -86,9 +86,9 @@ S -  Scale
 
 **Стандартныу хоткеи : **
 
-G -  Move
+W -  Move
 
-R -  Rotate
+E -  Rotate
 
-S -  Scale
+R -  Scale
 
