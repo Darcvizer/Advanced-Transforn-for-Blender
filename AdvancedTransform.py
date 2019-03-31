@@ -53,19 +53,19 @@ def GetView(self):
 		if x < 0:
 			self.negativMlt = True
 			self.V_matrix = Matrix.Translation(self.center) @ (
-				Matrix(self.mat.to_3x3() @ Matrix.Rotation(1.570796, 3, Vector((0.0, 1.0, 0.0)))).to_4x4())
+				Matrix(self.mat.to_3x3() @ Matrix.Rotation(-1.570796, 3, Vector((0.0, 1.0, 0.0)))).to_4x4())
 		else:
 			self.V_matrix = Matrix.Translation(self.center) @ (
-					Matrix(self.mat.to_3x3() @ Matrix.Rotation(-1.570796, 3, Vector((0.0, 1.0, 0.0)))).to_4x4())
+					Matrix(self.mat.to_3x3() @ Matrix.Rotation(1.570796, 3, Vector((0.0, 1.0, 0.0)))).to_4x4())
 	elif abs(y) > abs(x) and abs(y) > abs(z):
 		self.exc_axis = 'y'
 		if y < 0:
 			self.negativMlt = True
 			self.V_matrix = Matrix.Translation(self.center) @ (
-				Matrix(self.mat.to_3x3() @ Matrix.Rotation(-1.570796, 3, Vector((1.0, 0.0, 0.0)))).to_4x4())
+				Matrix(self.mat.to_3x3() @ Matrix.Rotation(1.570796, 3, Vector((1.0, 0.0, 0.0)))).to_4x4())
 		else:
 			self.V_matrix = Matrix.Translation(self.center) @ (
-				Matrix(self.mat.to_3x3() @ Matrix.Rotation(1.570796, 3, Vector((1.0, 0.0, 0.0)))).to_4x4())
+				Matrix(self.mat.to_3x3() @ Matrix.Rotation(-1.570796, 3, Vector((1.0, 0.0, 0.0)))).to_4x4())
 
 	elif abs(z) > abs(x) and abs(z) > abs(y):
 		self.exc_axis = 'z'
@@ -73,10 +73,10 @@ def GetView(self):
 		if z < 0:
 			self.negativMlt = True
 			self.V_matrix = Matrix.Translation(self.center) @ (
-				Matrix(self.mat.to_3x3() @ Matrix.Rotation(1.570796, 3, Vector((0.0, 0.0, 0.0)))).to_4x4())
+				Matrix(self.mat.to_3x3() @ Matrix.Rotation(-1.570796*2, 3, Vector((1.0, 0.0, 0.0)))).to_4x4())
 		else:
 			self.V_matrix = Matrix.Translation(self.center) @ (
-				Matrix(self.mat.to_3x3() @ Matrix.Rotation(-1.570796*2, 3, Vector((1.0, 0.0, 0.0)))).to_4x4())
+				Matrix(self.mat.to_3x3() @ Matrix.Rotation(1.570796*2, 3, Vector((0.0, 0.0, 0.0)))).to_4x4())
 
 def GetCenter(self):
 	###---------------------------------------Get Center Selection--------------------------------------------------###
@@ -319,7 +319,7 @@ def CalculateCirclePoint(self):
 	self.firstPoint = (view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.region_data,
 												  (self.RotaionMatrix @ MS) @ V((0,0,0))))
 def f (self, context, event):
-	print("self.Angle", self.Angle)
+	# print("self.Angle", self.Angle)
 	if self.call_no_snap == 20:
 		self.mousePosition = event.mouse_region_x, event.mouse_region_y
 		self.temp_loc_last = GetCoordMouse(self, context, event)
@@ -386,26 +386,27 @@ def DrawCalback(self, context, event):
 		# =----------------Draw main circle---------------------#
 		if self.ModeRotation:
 			shader = gpu.shader.from_builtin('2D_UNIFORM_COLOR')
-			batch = batch_for_shader(shader, 'TRIS', {"pos": self.MainCirclePositiv[:self.realAngle*3]})
+			batch = batch_for_shader(shader, 'TRIS', {"pos": self.MainCircleNegativ[:(self.realAngle * 3) * -1]})
 			shader.bind()
 			shader.uniform_float("color", self.color)
 			batch.draw(shader)
 		else:
 			shader = gpu.shader.from_builtin('2D_UNIFORM_COLOR')
-			batch = batch_for_shader(shader, 'TRIS', {"pos": self.MainCircleNegativ[:(self.realAngle*3)*-1]})
+			batch = batch_for_shader(shader, 'TRIS', {"pos": self.MainCirclePositiv[:self.realAngle * 3]})
 			shader.bind()
 			shader.uniform_float("color", self.color)
 			batch.draw(shader)
 
+
 		if self.ModeRotation:
 			shader = gpu.shader.from_builtin('2D_UNIFORM_COLOR')
-			batch = batch_for_shader(shader, 'TRIS', {"pos": self.SecondCirclePositiv[self.Angle*12:]})
+			batch = batch_for_shader(shader, 'TRIS', {"pos": self.SecondCircleNegativ[(self.Angle * 12) * -1:]})
 			shader.bind()
 			shader.uniform_float("color", (0.5, 0.5, 0.5, 0.1))
 			batch.draw(shader)
 		else:
 			shader = gpu.shader.from_builtin('2D_UNIFORM_COLOR')
-			batch = batch_for_shader(shader, 'TRIS', {"pos": self.SecondCircleNegativ[(self.Angle*12)*-1:]})
+			batch = batch_for_shader(shader, 'TRIS', {"pos": self.SecondCirclePositiv[self.Angle * 12:]})
 			shader.bind()
 			shader.uniform_float("color", (0.5, 0.5, 0.5, 0.1))
 			batch.draw(shader)
@@ -413,13 +414,13 @@ def DrawCalback(self, context, event):
 
 		if self.ModeRotation:
 			shader = gpu.shader.from_builtin('2D_UNIFORM_COLOR')
-			batch = batch_for_shader(shader, 'TRIS', {"pos": self.SecondCirclePositiv[:self.Angle*12]})
+			batch = batch_for_shader(shader, 'TRIS', {"pos": self.SecondCircleNegativ[:(self.Angle * 12) * -1]})
 			shader.bind()
 			shader.uniform_float("color", (1, 0.4, 0.2, 0.2))
 			batch.draw(shader)
 		else:
 			shader = gpu.shader.from_builtin('2D_UNIFORM_COLOR')
-			batch = batch_for_shader(shader, 'TRIS', {"pos": self.SecondCircleNegativ[:(self.Angle*12)*-1]})
+			batch = batch_for_shader(shader, 'TRIS', {"pos": self.SecondCirclePositiv[:self.Angle * 12]})
 			shader.bind()
 			shader.uniform_float("color", (1, 0.4, 0.2, 0.2))
 			batch.draw(shader)
@@ -550,13 +551,13 @@ def StartDraw(self, context, event):
 
 	self.LD = Rot(self, V((zero,zero))[0], V((zero,zero))[1])
 	self.LC = Rot(self, V((zero,zero))[0], V((zero,bpy.context.region.height/2))[1])
-	self.LU = Rot(self, V((zero,C.region.height + max))[0], V((zero,C.region.height + max))[1])
-	self.RD = Rot(self, V((C.region.width + max,zero))[0], V((C.region.width + max,zero))[1])
-	self.RC = Rot(self, V((C.region.width + max,C.region.height/2))[0], V((C.region.width + max,C.region.height/2))[1])
-	self.RU = Rot(self, V((C.region.width + max,C.region.height + max))[0], V((C.region.width + max,C.region.height + max))[1])
-	self.C  = Rot(self, V((C.region.width/2,C.region.height /2 ))[0],  V((C.region.width/2,C.region.height /2 ))[1])
-	self.CU = Rot(self, V((C.region.width/2,C.region.height + max ))[0], V((C.region.width/2,C.region.height + max ))[1])
-	self.CD = Rot(self, V((C.region.width/2,zero))[0], V((C.region.width/2,zero))[1])
+	self.LU = Rot(self, V((zero,bpy.context.region.height + max))[0], V((zero,bpy.context.region.height + max))[1])
+	self.RD = Rot(self, V((bpy.context.region.width + max,zero))[0], V((bpy.context.region.width + max,zero))[1])
+	self.RC = Rot(self, V((bpy.context.region.width + max,bpy.context.region.height/2))[0], V((bpy.context.region.width + max,bpy.context.region.height/2))[1])
+	self.RU = Rot(self, V((bpy.context.region.width + max,bpy.context.region.height + max))[0], V((bpy.context.region.width + max,bpy.context.region.height + max))[1])
+	self.C  = Rot(self, V((bpy.context.region.width/2,bpy.context.region.height /2 ))[0],  V((bpy.context.region.width/2,bpy.context.region.height /2 ))[1])
+	self.CU = Rot(self, V((bpy.context.region.width/2,bpy.context.region.height + max ))[0], V((bpy.context.region.width/2,bpy.context.region.height + max ))[1])
+	self.CD = Rot(self, V((bpy.context.region.width/2,zero))[0], V((bpy.context.region.width/2,zero))[1])
 
 	# print("#-----------#")
 	# print("self.LD", self.LD)
@@ -713,33 +714,39 @@ def SetupAxisUV(self):
 		return 'y'
 
 def CalculatePointForStartDrawing(self, context):
+	self.width = 0
+	for i in bpy.context.screen.areas:
+		if i.type == 'VIEW_3D':
+			for j in i.regions:
+				if j.type == 'UI':
+					width = j.width
 	self.arr = []
 	Offset = context.region.height * 0.05
 	self.arr.append(V((0,0)))
-	self.arr.append(V((bpy.context.region.width,0)))
-	self.arr.append(V((context.region.width, context.region.height * 0.05)))
-	self.arr.append(V((context.region.width, context.region.height * 0.05)))
+	self.arr.append(V((bpy.context.region.width - width , 0)))
+	self.arr.append(V((context.region.width - width, context.region.height * 0.05)))
+	self.arr.append(V((context.region.width - width, context.region.height * 0.05)))
 	self.arr.append(V((0, context.region.height * 0.05)))
 	self.arr.append(V((0, 0)))
 
-	self.arr.append(V((context.region.width, context.region.height * 0.05)))
-	self.arr.append(V((bpy.context.region.width, context.region.height)))
-	self.arr.append(V((context.region.width * 0.95, context.region.height)))
-	self.arr.append(V((context.region.width * 0.95, context.region.height)))
-	self.arr.append(V((context.region.width * 0.95, context.region.height * 0.05)))
-	self.arr.append(V((context.region.width, context.region.height * 0.05)))
+	self.arr.append(V((context.region.width - width, context.region.height * 0.05)))
+	self.arr.append(V((bpy.context.region.width - width, context.region.height)))
+	self.arr.append(V(((context.region.width - width) * 0.95, context.region.height)))
+	self.arr.append(V(((context.region.width - width) * 0.95, context.region.height)))
+	self.arr.append(V(((context.region.width - width) * 0.95, context.region.height * 0.05)))
+	self.arr.append(V(((context.region.width - width), context.region.height * 0.05)))
 
-	self.arr.append(V((context.region.width * 0.95, context.region.height)))
-	self.arr.append(V((context.region.width * 0.05, context.region.height)))
-	self.arr.append(V((context.region.width * 0.05, context.region.height * 0.95)))
-	self.arr.append(V((context.region.width * 0.05, context.region.height * 0.95)))
-	self.arr.append(V((context.region.width * 0.95, context.region.height * 0.95)))
-	self.arr.append(V((context.region.width * 0.95, context.region.height)))
+	self.arr.append(V(((context.region.width - width) * 0.95, context.region.height)))
+	self.arr.append(V(((context.region.width - width) * 0.05, context.region.height)))
+	self.arr.append(V(((context.region.width - width) * 0.05, context.region.height * 0.95)))
+	self.arr.append(V(((context.region.width - width) * 0.05, context.region.height * 0.95)))
+	self.arr.append(V(((context.region.width - width) * 0.95, context.region.height * 0.95)))
+	self.arr.append(V(((context.region.width - width) * 0.95, context.region.height)))
 
 	self.arr.append(V((0, context.region.height * 0.05)))
-	self.arr.append(V((context.region.width * 0.05, context.region.height * 0.05)))
-	self.arr.append(V((context.region.width * 0.05, context.region.height)))
-	self.arr.append(V((context.region.width * 0.05, context.region.height)))
+	self.arr.append(V(((context.region.width - width) * 0.05, context.region.height * 0.05)))
+	self.arr.append(V(((context.region.width - width) * 0.05, context.region.height)))
+	self.arr.append(V(((context.region.width - width) * 0.05, context.region.height)))
 	self.arr.append(V((0, context.region.height)))
 	self.arr.append(V((0, context.region.height * 0.05)))
 
@@ -747,6 +754,7 @@ def CalculatePointForStartDrawing(self, context):
 
 
 	self.arr.append(V((0, context.region.height - Offset)))
+	self.width = width
 
 def DrawStartTool(self, context):
 	try:
@@ -759,7 +767,7 @@ def DrawStartTool(self, context):
 		shader.uniform_float("color", (1, 1, 1, 0.1))
 		batch.draw(shader)
 
-		blf.position(0, (context.region.width / 2)-80, (context.region.height * 0.025),0)
+		blf.position(0, ((context.region.width - self.width) / 2) - context.region.width * 0.1, (context.region.height * 0.025),0)
 		blf.size(0, 30, 50)
 		blf.draw(0, str(self.toolName))
 		glDisable(GL_BLEND)
@@ -1287,6 +1295,7 @@ class AdvancedMove(Operator):
 					UserPresets(self, context, True)
 					UserSnap(self, context, Set=True)
 					bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+					#context.area.header_text_set()
 					return {'FINISHED'}
 			else:
 				if self.temp_loc_first is None:
@@ -1305,6 +1314,7 @@ class AdvancedMove(Operator):
 						self.count_step = 0
 						UserPresets(self, context, True)
 						bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+						#context.area.header_text_set()
 						return {'FINISHED'}
 
 
@@ -1318,6 +1328,7 @@ class AdvancedMove(Operator):
 			if event.value == 'RELEASE':
 				UserPresets(self, context, True)
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+				# context.area.header_text_set()
 				return {'FINISHED'}
 
 			# -----------------------MIDDLE_MOUSE No Constrain-------------------------------------------------------------#
@@ -1329,6 +1340,7 @@ class AdvancedMove(Operator):
 			if event.value == 'RELEASE':
 				UserPresets(self, context, False)
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+				# context.area.header_text_set()
 				return {'FINISHED'}
 
 			# -----------------------SPACEBAR Bottom            -------------------------------------------------------------#
@@ -1357,12 +1369,12 @@ class AdvancedMove(Operator):
 					else:
 						bpy.ops.object.select_all(action='DESELECT')
 					bpy.ops.view3d.select('INVOKE_DEFAULT', extend=True, deselect=False, enumerate=False, toggle=False)
-					print ("sosok1")
+					#print ("sosok1")
 
 
 				if self.count_step <= 2:
 					self.count_step += 1
-					print(self.count_step)
+					#print(self.count_step)
 					return {'RUNNING_MODAL'}
 				else:
 					self.temp_loc_last = GetCoordMouse(self, context, event)
@@ -1379,24 +1391,25 @@ class AdvancedMove(Operator):
 			except:
 				pass
 			context.area.tag_redraw()
+			# context.area.header_text_set()
 			return {'FINISHED'}
 
 		if event.alt or self.tweakSelection:
 			self.alt = True
-			print("Alt")
+			# print("Alt")
 			if event.type == 'LEFTMOUSE' or self.tweakSelection:
 				if self.temp_loc_first is None:
 					self.temp_loc_first = GetCoordMouse(self, context, event)
 					self.tweakSelection = True
-					print ("alt sosok1")
+					# print ("alt sosok1")
 				if event.value == 'PRESS':
-					print("alt sosok2")
+					# print("alt sosok2")
 					if self.count_step <= 2:
 						self.count_step += 1
-						print(self.count_step)
+						# print(self.count_step)
 						return {'RUNNING_MODAL'}
 					else:
-						print("alt sosok4")
+						# print("alt sosok4")
 						self.temp_loc_last = GetCoordMouse(self, context, event)
 						self.axis = SetupAxis(self, self.temp_loc_first, self.temp_loc_last)
 						SetConstarin.SetMoveOnly(self, context, self.axis)
@@ -1405,13 +1418,14 @@ class AdvancedMove(Operator):
 						self.temp_loc_first = None
 					return {'RUNNING_MODAL'}
 		if (not event.alt) and self.alt:
-			print ("alt  exit")
+			# print ("alt  exit")
 			UserPresets(self, context, True)
 			try:
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
 			except:
 				pass
 			context.area.tag_redraw()
+			# context.area.header_text_set()
 			return {'FINISHED'}
 
 		elif event.unicode == 'G' or event.unicode == 'g':
@@ -1419,30 +1433,36 @@ class AdvancedMove(Operator):
 				bpy.ops.transform.edge_slide('INVOKE_DEFAULT')
 				UserPresets(self, context, True)
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+				# context.area.header_text_set()
 				return {'FINISHED'}
 		elif event.unicode == 'X' or event.unicode == 'x':
 			bpy.ops.transform.translate('INVOKE_DEFAULT', constraint_axis=(True, False, False))
 			UserPresets(self, context, True)
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+			# context.area.header_text_set()
 			return {'FINISHED'}
 		elif event.unicode == 'Y' or event.unicode == 'y':
 			bpy.ops.transform.translate('INVOKE_DEFAULT', constraint_axis=(False, True, False))
 			UserPresets(self, context, True)
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+			# context.area.header_text_set()
 			return {'FINISHED'}
 		elif event.unicode == 'Z' or event.unicode == 'z':
 			bpy.ops.transform.translate('INVOKE_DEFAULT', constraint_axis=(False, False, True))
 			UserPresets(self, context, True)
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+			# context.area.header_text_set()
 			return {'FINISHED'}
 
 		if event.type == 'ESC':
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+			# context.area.header_text_set()
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
 
 	def invoke(self, context, event):
-		#context.area.header_text_set('Drag LMB constraint axis, RMB translate by two axis, MMB free translate, SPACE free translate with snap and rotate along normal')
+		context.area.header_text_set(
+			'Drag LMB constraint axis, RMB translate by two axis, MMB free translate, SPACE free translate with snap and rotate along normal, Shift tweak new selection, Alt Current selection')
 		if context.space_data.type == 'VIEW_3D':
 			UserSnap(self, context)
 			UserPresets(self, context)
@@ -1568,7 +1588,7 @@ class AdvancedScale(Operator):
 		return {'RUNNING_MODAL'}
 
 	def invoke(self, context, event):
-	   # context.area.header_text_set('Drag LMB constraint axis, RMB resize by two axis, MMB free resize, SHIFT mirror, SPACE flatten')
+		context.area.header_text_set('Drag LMB constraint axis, RMB resize by two axis, MMB free resize, SHIFT mirror, SPACE flatten')
 		if context.space_data.type == 'VIEW_3D':
 			UserSnap(self, context)
 			UserPresets(self, context)
@@ -1637,6 +1657,7 @@ class AdvancedScaleZore(Operator):
 			SetConstarin.SetScaleOnlySetZero(self, context, self.axis)
 			UserPresets(self, context, True)
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle_Zero, 'WINDOW')
+			context.area.tag_redraw()
 			return {'FINISHED'}
 
 
@@ -1709,6 +1730,7 @@ class AdvancedScaleMirror(Operator):
 			SetConstarin.SetScaleOnlySetNegative(self, context, self.axis)
 			UserPresets(self, context, True)
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle_Mirror, 'WINDOW')
+			context.area.tag_redraw()
 			return {'FINISHED'}
 
 
@@ -1770,6 +1792,7 @@ class AdvancedRotation(Operator):
 				SetConstarin.SetRotationOnly(self, context, self.exc_axis)
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
 				UserPresets(self, context, True)
+				context.area.tag_redraw()
 				return {'FINISHED'}
 			else:
 				if self.temp_loc_first is None:
@@ -1792,10 +1815,12 @@ class AdvancedRotation(Operator):
 							SetConstarin.SnapRotation(self, context, rotation*-1, self.exc_axis)
 						else:
 							SetConstarin.SnapRotation(self, context, rotation, self.exc_axis)
-				if event.value == 'RELEASE':
+					return {'RUNNING_MODAL'}
+				elif event.value == 'RELEASE':
 					bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 					bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
 					UserPresets(self, context, True)
+					context.area.tag_redraw()
 					return {'FINISHED'}
 
 		elif event.type == 'RIGHTMOUSE' or self.RB:
@@ -1817,10 +1842,12 @@ class AdvancedRotation(Operator):
 						SetConstarin.SnapRotation(self, context, rotation*-1, self.exc_axis)
 					else:
 						SetConstarin.SnapRotation(self, context, rotation, self.exc_axis)
-			if event.value == 'RELEASE':
+				return {'RUNNING_MODAL'}
+			elif event.value == 'RELEASE':
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
 				UserPresets(self, context, True)
+				context.area.tag_redraw()
 				return {'FINISHED'}
 
 		if event.type == 'ESC':
@@ -1830,11 +1857,12 @@ class AdvancedRotation(Operator):
 			except:
 				pass
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle1, 'WINDOW')
+			context.area.tag_redraw()
 			return {'CANCELLED'}
 		return {'RUNNING_MODAL'}
 
 	def invoke(self, context, event):
-		# context.area.header_text_set('LMB constraint view axis, RMB constraint view axis snap 15 degrees, MMB free rotate')
+		context.area.header_text_set('LMB constraint view axis, RMB constraint view axis snap, MMB free rotate')
 		# self.time = time.clock()
 		if context.space_data.type == 'VIEW_3D':
 			PREFS = context.preferences.addons[__name__].preferences
@@ -1904,7 +1932,7 @@ class AdvancedMoveUV(Operator):
 		for area in bpy.context.screen.areas:
 			if area.type == 'IMAGE_EDITOR':
 				cursor = area.spaces.active.cursor_location
-				print (cursor)
+				# print (cursor)
 		# -----------------------LEFT_MOUSE Only Axis Move-------------------------------------------------------------#
 
 		if event.type == 'LEFTMOUSE' or self.LB:
@@ -2209,6 +2237,83 @@ class AdvancedRotationUV(Operator):
 			self.report({'WARNING'}, "Active space must be a View3d")
 			return {'CANCELLED'}
 
+
+addon_keymaps = []
+
+
+def get_addon_preferences():
+	''' quick wrapper for referencing addon preferences '''
+	addon_preferences = bpy.context.user_preferences.addons[__name__].preferences
+	return addon_preferences
+
+
+def get_hotkey_entry_item(km, kmi_value):
+	'''
+	returns hotkey of specific type, with specific properties.name (keymap is not a dict, so referencing by keys is not enough
+	if there are multiple hotkeys!)
+	'''
+	for i, km_item in enumerate(km.keymap_items):
+		if km.keymap_items[i].idname == kmi_value:
+			return km_item
+	return None
+
+
+def add_hotkey():
+	user_preferences = bpy.context.preferences
+	addon_prefs = user_preferences.addons[__name__].preferences
+
+
+	wm = bpy.context.window_manager
+	kc = wm.keyconfigs.addon
+	km = kc.keymaps.new(name="3D View Generic", space_type='VIEW_3D', region_type='WINDOW')
+	kmi = km.keymap_items.new(AdvancedMove.bl_idname, 'G', 'PRESS', shift=False, ctrl=False, alt=False)
+	#kmi.properties.name = "view3d.advancedmove"
+	kmi.active = True
+	addon_keymaps.append((km, kmi))
+
+	wm1 = bpy.context.window_manager
+	kc1 = wm1.keyconfigs.addon
+	km1 = kc1.keymaps.new(name="3D View Generic", space_type='VIEW_3D', region_type='WINDOW')
+	kmi1 = km1.keymap_items.new(AdvancedScale.bl_idname, 'S', 'PRESS', shift=False, ctrl=False, alt=False)
+	#kmi.properties.name = "view3d.advancedmove"
+	kmi1.active = True
+	addon_keymaps.append((km1, kmi1))
+
+	wm2 = bpy.context.window_manager
+	kc2 = wm2.keyconfigs.addon
+	km2 = kc2.keymaps.new(name="3D View Generic", space_type='VIEW_3D', region_type='WINDOW')
+	kmi2 = km2.keymap_items.new(AdvancedRotation.bl_idname, 'R', 'PRESS', shift=False, ctrl=False, alt=False)
+	#kmi.properties.name = "view3d.advancedmove"
+	kmi2.active = True
+	addon_keymaps.append((km2, kmi2))
+
+class AdvancedTransform_Add_Hotkey(bpy.types.Operator):
+	''' Add hotkey entry '''
+	bl_idname = "advanced_transform.add_hotkey"
+	bl_label = "Advanced Transform Add Hotkey"
+	bl_options = {'REGISTER', 'INTERNAL'}
+
+	def execute(self, context):
+		add_hotkey()
+
+		self.report({'INFO'}, "Hotkey added in User Preferences -> Input -> Screen -> Screen (Global)")
+		return {'FINISHED'}
+
+
+def remove_hotkey():
+	''' clears all addon level keymap hotkeys stored in addon_keymaps '''
+	wm = bpy.context.window_manager
+	kc = wm.keyconfigs.user
+	km = kc.keymaps['3D View Generic']
+
+	for i in bpy.context.window_manager.keyconfigs.addon.keymaps['3D View Generic'].keymap_items:
+		if i.name == 'Advanced Move' or i.name == 'VIEW3D_OT_advanced_rotation':
+			bpy.context.window_manager.keyconfigs.addon.keymaps['3D View Generic'].keymap_items.remove(i)
+		elif i.name == 'Advanced Scale' or i.name == 'VIEW3D_OT_advancedscale':
+			bpy.context.window_manager.keyconfigs.addon.keymaps['3D View Generic'].keymap_items.remove(i)
+		elif i.name == 'Advanced Rotation' or i.name == 'VIEW3D_OT_advancedmove':
+			bpy.context.window_manager.keyconfigs.addon.keymaps['3D View Generic'].keymap_items.remove(i)
+
 class AdvancedTransformPref(bpy.types.AddonPreferences):
 	bl_idname = __name__
 	Snapping_Step = EnumProperty(
@@ -2233,6 +2338,55 @@ class AdvancedTransformPref(bpy.types.AddonPreferences):
 		layout = self.layout
 		layout.prop(self, "Snapping_Step")
 		layout.prop(self, "Use_Advanced_Transform")
+		#---------------------------------
+		box = layout.box()
+		split = box.split()
+		col = split.column()
+		#col.label("Setup Advanced Move")
+		col.separator()
+		wm = bpy.context.window_manager
+		kc = wm.keyconfigs.user
+		km = kc.keymaps['3D View Generic']
+		kmi = get_hotkey_entry_item(km, "view3d.advancedmove")
+		if kmi:
+			col.context_pointer_set("keymap", km)
+			rna_keymap_ui.draw_kmi([], kc, km, kmi, col, 0)
+		else:
+			col.label("No hotkey entry found")
+			col.operator(AdvancedTransform_Add_Hotkey.bl_idname, text="Add hotkey entry", icon='ZOOMIN')
+		#-----------------------------------
+		box1 = layout.box()
+		split1 = box1.split()
+		col1 = split1.column()
+		# col.label("Setup Advanced Move")
+		col1.separator()
+		wm1 = bpy.context.window_manager
+		kc1 = wm1.keyconfigs.user
+		km1 = kc1.keymaps['3D View Generic']
+		kmi1 = get_hotkey_entry_item(km1, "view3d.advancedscale" )
+		if kmi1:
+			col1.context_pointer_set("keymap", km1)
+			rna_keymap_ui.draw_kmi([], kc1, km1, kmi1, col1, 0)
+		else:
+			col1.label("No hotkey entry found")
+			col1.operator(AdvancedTransform_Add_Hotkey.bl_idname, text="Add hotkey entry", icon='ZOOMIN')
+		#--------------------------------------
+		box2 = layout.box()
+		split2 = box2.split()
+		col2 = split2.column()
+		# col.label("Setup Advanced Move")
+		col2.separator()
+		wm2 = bpy.context.window_manager
+		kc2 = wm2.keyconfigs.user
+		km2 = kc2.keymaps['3D View Generic']
+		kmi2 = get_hotkey_entry_item(km2, "view3d.advanced_rotation")
+		if kmi2:
+			col2.context_pointer_set("keymap", km2)
+			rna_keymap_ui.draw_kmi([], kc2, km2, kmi2, col2, 0)
+		else:
+			col2.label("No hotkey entry found")
+			col2.operator(AdvancedTransform_Add_Hotkey.bl_idname, text="Add hotkey entry", icon='ZOOMIN')
+
 
 class SetConstarin(Operator):
 	bl_idname = "view3d.setconstrain"
@@ -2385,15 +2539,17 @@ class SetConstarin(Operator):
 	def SetMoveExcludeUV(self):
 		bpy.ops.transform.translate('INVOKE_DEFAULT', constraint_axis=(True, True, False))
 
-classes = (AdvancedMove, AdvancedScale, AdvancedRotation, AdvancedMoveUV, AdvancedScaleUV, AdvancedRotationUV, AdvancedTransformPref, AdvancedScaleZore, AdvancedScaleMirror)
+classes = (AdvancedMove, AdvancedScale, AdvancedRotation, AdvancedMoveUV, AdvancedScaleUV, AdvancedRotationUV, AdvancedTransformPref, AdvancedScaleZore, AdvancedScaleMirror, AdvancedTransform_Add_Hotkey)
 
 def register():
 	for c in classes:
 		bpy.utils.register_class(c)
+	add_hotkey()
+
 
 def unregister():
 	for c in reversed(classes):
 		bpy.utils.unregister_class(c)
-
+	remove_hotkey()
 if __name__ == "__main__":
 	register()
