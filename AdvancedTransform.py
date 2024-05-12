@@ -44,7 +44,13 @@ bl_info = {
     "blender": (4, 1, 0),
     "category": "View3D"}
 
+v0 = V((0,0,0))
+
 DubegMode = True
+CirclePointDivider = 3
+RingWidth = 0.25
+RingRadius = 1
+AxisColor = lambda axis: (0.8, 0.2, 0.2, 0.3) if axis == 'x' else ((0.1, 0.6, 0.1, 0.3) if axis == 'y' else (0.0, 0.3, 0.6, 0.3))
 def deb(value,dis=None, pos=None, dir=None, forced=False):
     """Debug function
     text: Value for print | It is general prtin()
@@ -87,15 +93,20 @@ def deb(value,dis=None, pos=None, dir=None, forced=False):
         if forced:
             CreateObjects()
     return 0
-                
+
+def GetBestAxisInMatrix(matrix, axis):
+    """Find max similar axis in matrix"""
+    index_best_axis = [abs(axis.dot(matrix.col[i])) for i in range(0,3)] # Get dot for all axes
+    index_best_axis_index = index_best_axis.index(max(index_best_axis))
+    return index_best_axis_index
+
 def GetNormalForIntersectionPlane(TransfromOrientationMatrix):
     """Getting the closest axis to camera direction"""
     view_direction = bpy.context.region_data.view_rotation @ Vector((0, 0, -1))
-    index_best_axis = [abs(view_direction.dot(TransfromOrientationMatrix.col[i])) for i in range(0,3)] # Get dot for all axes
-    index_best_axis = index_best_axis.index(max(index_best_axis))
-    normal_intersect_plane = (TransfromOrientationMatrix.col[index_best_axis] * -1).normalized()# do invert for normal because we need derection to camera
+    index_best_axis_index = GetBestAxisInMatrix(TransfromOrientationMatrix, view_direction)
+    normal_intersect_plane = (TransfromOrientationMatrix.col[index_best_axis_index] * -1).normalized()# do invert for normal because we need derection to camera
     return normal_intersect_plane.to_3d()
-    
+
 def GetPivotPointPoistion():
     # best wat to get point use cursor, because using loop if user selected 1000 meshes too slowly    
     condition = lambda name: bpy.context.scene.tool_settings.transform_pivot_point == name
@@ -182,6 +193,7 @@ class ShaderUtility():
     def __init__(self, matrix, pivot, axis):
         self.Pivot = pivot.copy()
         self.Axis = 0 if axis == 'x' else (1 if axis == 'y' else 2)
+        self.Matrix = matrix
         self.DirectionVector = matrix[self.Axis].to_3d() 
         self.GetForwardVector = lambda: V((+0.0, +1.0, +0.0)) if self.Axis == 1 else V((+0.0, +1.0, +0.0)) * -1
         self.ApplyScale = lambda scale, arr: [(i @ mathutils.Matrix.Scale(scale, 4)) for i in arr]
@@ -194,16 +206,19 @@ class ShaderUtility():
         self.Axis = 0 if axis == 'x' else (1 if axis == 'y' else 2)
         self.DirectionVector = matrix[self.Axis].to_3d() 
 
-    def RTM(self, vertices, flip_current_forward = False):
+    def RTM(self, vertices, custom_direction = None, current_direction = None, flip_current_forward = False):
         """Rotate Vector By Transform Orientation Matrix"""
-        current_direction = self.GetForwardVector() # i don't know why but axies X and Z inverted and i must flip them
+        direction = self.DirectionVector if custom_direction == None else custom_direction
+
+        current_direction = self.GetForwardVector() if current_direction == None else current_direction# i don't know why but axies X and Z inverted and i must flip them
         if flip_current_forward: current_direction *= -1
-        angle = current_direction.angle(self.DirectionVector) # get angle between original direction and desired rirection
-        axis_for_rotation = current_direction.cross(self.DirectionVector) # Axis for rotation
+        angle = current_direction.angle(direction) # get angle between original direction and desired rirection
+        axis_for_rotation = current_direction.cross(direction) # Axis for rotation
  
         return [i @ mathutils.Matrix.Rotation(angle, 4, axis_for_rotation) + self.Pivot for i in vertices]
     
     def ViewSize(self, vertices):
+        """Calculate screen size"""
         view_distance = None
         for area in bpy.context.screen.areas:
             if area.type == 'VIEW_3D':
@@ -213,17 +228,11 @@ class ShaderUtility():
                     view_distance = region_3d.view_distance
                     break
 
-        lerp = lambda a, b, alpha: (1 - alpha) * a + alpha * b
+        lerp = lambda a, b, alpha: (1 - alpha) * a + alpha * b # Thanks laundmo for example https://gist.github.com/laundmo/b224b1f4c8ef6ca5fe47e132c8deab56
         scale_factor = lerp(0 ,1,view_distance / 10)
 
-        center = sum(vertices, mathutils.Vector()) / len(vertices)
-        #vertices_from_pivot = [v - center for v in vertices]
-        #scale_matrix = mathutils.Matrix.Scale(scale_factor, 4)
-        #vertices = [scale_matrix @ v  + center for v in vertices_from_pivot]
         scale_matrix = mathutils.Matrix.Scale(scale_factor,3)
-        #vertices = [(scale_matrix @ (v-self.Pivot))+self.Pivot for v in vertices]
-        vertices = [((v-self.Pivot)@ scale_matrix)+self.Pivot for v in vertices]
-        return vertices
+        return [((v-self.Pivot)@ scale_matrix)+self.Pivot for v in vertices]
     
     def Facing(self, vector):
         current_direction = self.GetForwardVector() # i don't know why but axies X and Z inverted and i must flip them
@@ -268,27 +277,21 @@ class ShaderUtility():
 
         return arrow_faces, contour_arrow
     
-    def ShapePlane(self, scale = 2):
-        p_v1 = V((+1.0, +0.0, +1.0))
-        p_v2 = V((+1.0, +0.0, -1.0))
-        p_v3 = V((-1.0, +0.0, -1.0))
-        p_v4 = V((-1.0, +0.0, +1.0))
+    def ShapePlane(self, scale = 2, custom_direction = None, offset=V((0,0,0))):
+        p_v1 = V((+1.0, +0.0, +1.0)) + offset
+        p_v2 = V((+1.0, +0.0, -1.0)) + offset
+        p_v3 = V((-1.0, +0.0, -1.0)) + offset
+        p_v4 = V((-1.0, +0.0, +1.0)) + offset
 
         p = [p_v1, p_v2,p_v3, p_v4]
         p = self.ApplyScale(scale, p)
-        p = self.RTM(p)
+        p = self.RTM(p,custom_direction)
         p = self.ViewSize(p)
-
-        # what a crap
 
         plane_faces = [ p[0], p[3], p[1],
                         p[1], p[2], p[3],]
         
         contour_plane = [p[0], p[1], p[2], p[3]]
-
-        
-
-
 
         return plane_faces, contour_plane
     
@@ -322,18 +325,20 @@ class ShaderUtility():
         return grid
     
     def ShapeRing(self, DirectionVector):
-        radius = 1
-        num_points = 360#int(360//4)
+        # Get circle
+        radius = RingRadius
+        num_points = 360 // CirclePointDivider
         circle_points = self.GetCircle(radius, num_points)
 
-        # Get outer ring
-        outer_radius = 1.25
+        # Get outer curcle. Do that before transfomation because both rings need in original position
+        outer_radius = radius + RingWidth
         circle_outer_points = self.ApplyOffset(outer_radius, circle_points)
 
         # Rotate vertext by matrix axis
         circle_points= self.RTM(circle_points)
         circle_outer_points= self.RTM(circle_outer_points)
 
+        # Make fixed screen size
         circle_points = self.ViewSize(circle_points)
         circle_outer_points = self.ViewSize(circle_outer_points)
 
@@ -368,65 +373,86 @@ class ShaderUtility():
         return coordinates
 
     def MarkersForDegrees(self, DirectionVector):
-        def remap(value, from_min, from_max, to_min, to_max):
-            normalized_value = (value - from_min) / (from_max - from_min)
-            return to_min + normalized_value * (to_max - to_min)
-        marks = self.GetCircle(1.12, 72)
-        outer_marks = self.ApplyOffset(1.15, marks)
-        lines_5_deg = []
-        for i in range(72):
-            lines_5_deg.append(marks[i])
-            lines_5_deg.append(outer_marks[i])
+        def MakeMarkers (offset, cell_count, segments):
+            cell = RingWidth / cell_count
+            start_radius =  cell * offset + RingRadius
+            end_radius = (RingWidth - (cell * offset)) + RingRadius
 
-        marks = self.GetCircle(1.08, 24)
-        outer_marks = self.ApplyOffset(1.17, marks)
-        lines_15_deg = []
-        for i in range(24):
-            lines_15_deg.append(marks[i])
-            lines_15_deg.append(outer_marks[i])
+            marks = self.GetCircle(start_radius, segments)
+            outer_marks = self.ApplyOffset(end_radius, marks)
 
-        marks = self.GetCircle(1.05, 8)
-        outer_marks = self.ApplyOffset(1.20, marks)
-        lines_45_deg = []
-        for i in range(8):
-            lines_45_deg.append(marks[i])
-            lines_45_deg.append(outer_marks[i])
+            arr = []
+            for i in range(segments):
+                arr.append(marks[i])
+                arr.append(outer_marks[i])
+            return arr
+        
+        lines_5_deg  = MakeMarkers(4.5, 10, 72)
+        lines_15_deg = MakeMarkers(3, 10, 24)
+        lines_45_deg = MakeMarkers(2, 10, 8 )
+        lines_90_deg = MakeMarkers(0, 10, 4 )
 
-        marks = self.GetCircle(1.0, 4)
-        outer_marks = self.ApplyOffset(1.25, marks)
-        lines_90_deg = []
-        for i in range(4):
-            lines_90_deg.append(marks[i])
-            lines_90_deg.append(outer_marks[i])
+        markers = (lines_5_deg + lines_15_deg + lines_45_deg + lines_90_deg)
 
-        lines_5_deg= self.RTM(lines_5_deg)
-        lines_15_deg= self.RTM(lines_15_deg)
-        lines_45_deg= self.RTM(lines_45_deg)
-        lines_90_deg= self.RTM(lines_90_deg)
-
-        lines_5_deg = self.ViewSize(lines_5_deg)
-        lines_15_deg = self.ViewSize(lines_15_deg)
-        lines_45_deg = self.ViewSize(lines_45_deg)
-        lines_90_deg = self.ViewSize(lines_90_deg)
+        markers= self.RTM(markers)
+        markers = self.ViewSize(markers)
 
 
         # Rotate ring to First mouse clic
         SignedAngle= lambda v1, v2, axis: v1.angle(v2) * (1 if axis.dot(v1.cross(v2)) >= 0 else -1)
         angl = SignedAngle(lines_5_deg[0], DirectionVector, self.DirectionVector) * -1
+        markers = self.ApplyRotation(angl, markers, self.DirectionVector)
 
-        lines_5_deg  = self.ApplyRotation(angl, lines_5_deg, self.DirectionVector)
-        lines_15_deg = self.ApplyRotation(angl, lines_15_deg, self.DirectionVector)
-        lines_45_deg = self.ApplyRotation(angl, lines_45_deg, self.DirectionVector) 
-        lines_90_deg = self.ApplyRotation(angl, lines_90_deg, self.DirectionVector)
+        return markers
 
-        # lines_5_deg.extend(lines_15_deg)
-        # lines_45_deg.extend(lines_90_deg)
-        # lines = lines_5_deg.extend(lines_45_deg)
+    def GhostGizmo(self, axis, view_direction,scale = 1,):
+        # Make axis
+        x_axis = V((1,0,0)) * scale
+        y_axis = V((0,1,0)) * scale
+        z_axis = V((0,0,1)) * scale
 
+        #Rotate axin by matrix Global coord to Local
+        x_axis = x_axis @ self.Matrix.inverted()
+        y_axis = y_axis @ self.Matrix.inverted()
+        z_axis = z_axis @ self.Matrix.inverted()
 
-        return lines_5_deg,lines_15_deg, lines_45_deg, lines_90_deg
+        # make lines
+        line_x = [self.Pivot, x_axis + self.Pivot]
+        line_y = [self.Pivot, y_axis + self.Pivot]
+        line_z = [self.Pivot, z_axis + self.Pivot]
 
+        # Make Fixed Scale axises 
+        line_x = self.ViewSize(line_x)
+        line_y = self.ViewSize(line_y)
+        line_z = self.ViewSize(line_z)
 
+        # Make plane vetice with offset. Comit offset for see what will hapens
+        p_v1 = V((+2.0, +0.0, +2.0)) + (V((0,0,-2)) if axis == 2 else (V((-2,0,0)) if axis == 0 else V((0,0,0))))
+        p_v2 = V((+2.0, +0.0, -0.0)) + (V((0,0,-2)) if axis == 2 else (V((-2,0,0)) if axis == 0 else V((0,0,0))))
+        p_v3 = V((-0.0, +0.0, -0.0)) + (V((0,0,-2)) if axis == 2 else (V((-2,0,0)) if axis == 0 else V((0,0,0))))
+        p_v4 = V((-0.0, +0.0, +2.0)) + (V((0,0,-2)) if axis == 2 else (V((-2,0,0)) if axis == 0 else V((0,0,0))))
+        plane = [p_v1, p_v2,p_v3, p_v4]
+        plane = self.ApplyScale(scale/2, plane)
+
+        # Rotate Plane by view vector
+        dir = V((1,0,0)) if axis == 0 else (V((0,1,0)) if axis == 1 else V((0,0,1)))
+        angle = self.GetForwardVector().angle(dir)
+        axis_for_rotation = self.GetForwardVector().cross(dir)
+        plane = [i @ mathutils.Matrix.Rotation(angle, 4, axis_for_rotation) for i in plane]
+
+        # Trasfer from Global to Local
+        plane = [(i) @ self.Matrix.inverted() for i in plane]
+        plane = [(i + self.Pivot) for i in plane]
+
+        # Scale plane
+        plane = self.ViewSize(plane)
+
+        # Make faces and lines of plane
+        plane_faces = [ plane[0], plane[3], plane[1],
+                        plane[1], plane[2], plane[3],]
+        contour_plane = [plane[0], plane[1], plane[2], plane[3]]
+
+        return line_x, line_y, line_z, plane_faces, contour_plane
 
 
 class UserSettings():
@@ -510,7 +536,10 @@ class AdvancedTransform(Operator):
         """Function which be calling after delay"""
         self.PivotPoint = None
         self.TransfromOrientationMatrix = None
+        self.ViewAxisInMatrix = None
+        """index column for the best view direction"""
         self.NormalIntersectionPlane = None
+        """Normal current view in transform orientation matrix"""
         self.Axis = None
         
         self.Event = bpy.types.Event
@@ -529,11 +558,44 @@ class AdvancedTransform(Operator):
         #self.DrawCallBack_delegat = self.DrawCallBack # Empty drawcallback function
 
     def DrawCallBackBatch(self):
-        pass
+        if self.NormalIntersectionPlane != None:
+            current_axis = GetIndexOfMaxValueInVector(self.NormalIntersectionPlane)
+            line_x, line_y, line_z, plane_faces, plane_contour = self.ShaderUtility.GhostGizmo(self.ViewAxisInMatrix, self.NormalIntersectionPlane, 1.2)
+            # Make shader and batsh
+            shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+            gpu.state.blend_set("ALPHA")
+            OverrideAxisColor = lambda axis: (0.8, 0.2, 0.2, 0.45) if axis == 0 else ((0.1, 0.6, 0.1, 0.45) if axis == 1 else (0.0, 0.3, 0.6, 0.45))
+            batch = batch_for_shader(shader, 'TRIS', {"pos": plane_faces})
+            shader.uniform_float("color", OverrideAxisColor(self.ViewAxisInMatrix))
+            batch.draw(shader)
+
+            shader = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+            shader.uniform_float("lineWidth", 5)
+
+            shader.uniform_float("color", OverrideAxisColor(0))
+            batch = batch_for_shader(shader, 'LINES', {"pos": line_x})
+            batch.draw(shader)
+            shader.uniform_float("color", OverrideAxisColor(1))
+            batch = batch_for_shader(shader, 'LINES', {"pos": line_y})
+            batch.draw(shader)
+            shader.uniform_float("color", OverrideAxisColor(2))
+            batch = batch_for_shader(shader, 'LINES', {"pos": line_z})
+            batch.draw(shader)
+
+
+            shader = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+            shader.uniform_float("lineWidth", 1)
+            shader.uniform_float("color", (0.8, 0.8, 0.8, 1.0))
+            batch = batch_for_shader(shader, 'LINE_LOOP', {"pos": plane_contour})
+            batch.draw(shader)
+            
+
+    
+
 
     def DrawCallBack(self, context):
         try:
-            if self.TransfromOrientationMatrix != None and self.PivotPoint != None and self.Axis != None:
+            if self.TransfromOrientationMatrix != None and self.PivotPoint != None:
                 if self.ShaderUtility == None:
                     self.ShaderUtility = ShaderUtility(self.TransfromOrientationMatrix, self.PivotPoint, self.Axis)
                 else:
@@ -541,6 +603,7 @@ class AdvancedTransform(Operator):
                     self.DrawCallBackBatch()
         except ReferenceError:
             self.Canceled()
+
     def GenerateLambdaConditions(self):
         """Conditions for action, can be overridden at __init__ at children classes"""
         self.If_Modify = lambda event: event.shift or event.alt
@@ -704,6 +767,7 @@ class AdvancedTransform(Operator):
         self.PivotPoint = GetPivotPointPoistion()
         self.TransfromOrientationMatrix = GetTransfromOrientationMatrix()
         self.NormalIntersectionPlane = GetNormalForIntersectionPlane(self.TransfromOrientationMatrix)
+        self.ViewAxisInMatrix = GetBestAxisInMatrix(self.TransfromOrientationMatrix, self.NormalIntersectionPlane)
         self._handle = bpy.types.SpaceView3D.draw_handler_add(self.DrawCallBack, (context, ), 'WINDOW','POST_VIEW')# POST_PIXEL # POST_VIEW
         #self.OldMousePos = GetMouseLocation(self.PivotPoint, self.NormalIntersectionPlane, self.TransfromOrientationMatrix, event) 
         #CalculatePointForStartDrawing(self)
@@ -1014,7 +1078,7 @@ class AdvancedRotation(AdvancedTransform):
     """ Advanced move """
     bl_idname = "view3d.advanced_rotation"
     bl_label = "Advanced Rotation"
-    #bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {'REGISTER', 'UNDO'}
 
     def __init__(self):
         super().__init__()
@@ -1023,6 +1087,7 @@ class AdvancedRotation(AdvancedTransform):
         self.RotationValue = 0.0
         self.CurrentAngle = 0.0
         self.StartDrawVector = None
+        self.LastAngle = Vector((1,0,0))
 
         self.LM_D = lambda event: self.StartDelay(event, self.AfterLeftMouseAction, self.BedoreLeftMouseAction)
         self.If_LM_Cond = lambda event: self.If_LM(event)# and (self.ActionsState.LeftMouse == False and self.ActionsState.MoveMouse == False)
@@ -1036,12 +1101,15 @@ class AdvancedRotation(AdvancedTransform):
         if self.StartDrawVector != None:# and self.NewMousePos.length() != 0:
             start_drawing_vector = (self.StartDrawVector - self.PivotPoint).normalized()
             ring_faces, outer_contour, inner_contour = self.ShaderUtility.ShapeRing(start_drawing_vector)
+            markers_deg = self.ShaderUtility.MarkersForDegrees(start_drawing_vector)
 
-            val = int(math.fmod(self.RotationValue,360)) *-1 * 6 # Step filling faces. * 6 because we have 6 vertices per step
+            # Slices for visual fiilng the distance traveled
+            val = int(math.fmod(self.RotationValue // CirclePointDivider, 360//CirclePointDivider)) *-1 * 6 # Step filling faces. * 6 because we have 6 vertices per step
             ring_faces_fill = (ring_faces[:val] if self.RotationValue <= 0 else ring_faces[val:])
             ring_faces_empty = (ring_faces[val:] if self.RotationValue < 0 else ring_faces[:val]) if val != 0 else ring_faces
 
-            dm_5,dm_15,dm_45,dm_90 = self.ShaderUtility.MarkersForDegrees(start_drawing_vector)
+            axis = GetIndexOfMaxValueInVector(self.NormalIntersectionPlane)
+            color = AxisColor(axis)
 
             # Make shader and batsh
             shader = gpu.shader.from_builtin('UNIFORM_COLOR')
@@ -1049,25 +1117,18 @@ class AdvancedRotation(AdvancedTransform):
             gpu.state.blend_set("ALPHA")
 
             batch = batch_for_shader(shader, 'TRIS', {"pos": ring_faces_fill})
-            shader.uniform_float("color", (0.0, 0.3, 0.6, 0.3))
+            shader.uniform_float("color", color)
             batch.draw(shader)
             batch = batch_for_shader(shader, 'TRIS', {"pos": ring_faces_empty})
             shader.uniform_float("color", (0.5, 0.5, 0.5, 0.3))
             batch.draw(shader)
 
-            gpu.state.blend_set("ALPHA")
             gpu.state.depth_test_set('ALWAYS')
             shader = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
             shader.uniform_float("lineWidth", 1)
 
             shader.uniform_float("color", (0.2, 0.2, 0.2, 1.))
-            batch = batch_for_shader(shader, 'LINES_ADJ', {"pos": dm_90})
-            batch.draw(shader)
-            batch = batch_for_shader(shader, 'LINES', {"pos": dm_45})
-            batch.draw(shader)
-            batch = batch_for_shader(shader, 'LINES', {"pos": dm_15})
-            batch.draw(shader)
-            batch = batch_for_shader(shader, 'LINES', {"pos": dm_5})
+            batch = batch_for_shader(shader, 'LINES', {"pos": markers_deg})
             batch.draw(shader)
 
             shader.uniform_float("color", (1.0, 1.0, 1.0, 1.0))
@@ -1082,16 +1143,14 @@ class AdvancedRotation(AdvancedTransform):
             batch = batch_for_shader(shader, 'LINES', {"pos": [self.PivotPoint, self.NewMousePos]})
             batch.draw(shader)
 
-
-        
-
     def GetAngle(self, v1, v2):
-        v1 = v1 - self.PivotPoint
-        v2 = v2 - self.PivotPoint
+        v1 = v1# - self.PivotPoint
+        v2 = v2# - self.PivotPoint
         # we can get "ValueError: math domain error" or ZeroDivisionError:
         try:
             cos_angle = v1.dot(v2) / (v1.length * v2.length)
             angle = math.acos(cos_angle)
+            math.ac
             return math.degrees(angle)
         except:
             print("ERRRRRROOOOORR")
@@ -1105,7 +1164,6 @@ class AdvancedRotation(AdvancedTransform):
             self.NewMousePos = self.GML(event)
             return self.ORI.RUNNING_MODAL
         elif event.value == 'RELEASE':
-            bl_options = {'REGISTER', 'UNDO'}
             return self.ORI.FINISHED
 
     def AfterRightMouseAction(self, event):
@@ -1118,20 +1176,28 @@ class AdvancedRotation(AdvancedTransform):
     
     def AfterMoveMouseAction(self, event):
         self.NewMousePos = self.GML(event)
-        self.CurrentAngle = self.GetAngle(self.OldMousePos, self.NewMousePos)
-        angle = self.CurrentAngle
-        # Check rotation step
-        if angle != None and round(angle / self.AngleSnappingStep) * self.AngleSnappingStep != 0:
-            angle = self.AngleSnappingStep
-            print("rot")
-            # find third axis 1 is mouse direction 2 is view direction  and 3 (corss) look at pivot point
-            cross=((self.NewMousePos - self.OldMousePos).normalized()).cross(self.NormalIntersectionPlane)
-            # if value biger then 0 counterclock-wise else clockwise
-            angle = angle*-1 if cross.dot(self.NewMousePos - self.PivotPoint) > 0 else angle
+        v1 = self.LastAngle
+        v2 = (self.NewMousePos - self.PivotPoint).normalized()
 
-            self.OldMousePos = self.NewMousePos.copy()
+        self.CurrentAngle = self.GetAngle(v1, v2)
+        self.CurrentAngle = v1.angle(v2)
+        angle = self.CurrentAngle
+        angle = math.degrees(self.CurrentAngle)
+        print(angle)
+
+        # Check rotation step
+        if angle != None and (round(angle / self.AngleSnappingStep) * self.AngleSnappingStep) != 0:
+            angle = self.AngleSnappingStep
+            # find third axis 1 is mouse direction 2 is view direction  and 3 (corss) look at pivot point
+            cross=((self.NewMousePos - self.OldMousePos)).normalized().cross(self.NormalIntersectionPlane)
+            # if value biger then 0 counterclock-wise else clockwise
+            angle = angle*-1 if cross.dot(self.NewMousePos ) > 0 else angle
+
             self.RotationValue += angle
-            
+            # Rotate self.OldMousePos to current rotation
+            self.OldMousePos = self.NewMousePos
+            self.LastAngle = (self.NewMousePos - self.PivotPoint).normalized() @ mathutils.Matrix.Rotation(math.radians(angle), 4, self.NormalIntersectionPlane)
+            deb ("","", self.PivotPoint, self.OldMousePos)
             SetConstarin.SetRotationOnlyAT(angle , GetIndexOfMaxValueInVector(self.NormalIntersectionPlane))
         return self.ORI.RUNNING_MODAL
 
