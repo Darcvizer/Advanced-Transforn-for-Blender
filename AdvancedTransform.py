@@ -106,6 +106,7 @@ def GetNormalForIntersectionPlane(TransfromOrientationMatrix):
 def GetPivotPointPoistion():
     # best wat to get point use cursor, because using loop if user selected 1000 meshes too slowly    
     condition = lambda name: bpy.context.scene.tool_settings.transform_pivot_point == name
+
     original_pivot_point = bpy.context.scene.cursor.location.copy()
     bpy.ops.view3d.snap_cursor_to_active() if condition('ACTIVE_ELEMENT') else bpy.ops.view3d.snap_cursor_to_selected() 
     new_pivot_point = bpy.context.scene.cursor.location.copy()
@@ -222,6 +223,7 @@ class ShaderUtility():
     def ViewSize(self, vertices):
         """Calculate screen size"""
         view_distance = bpy.context.region_data.view_distance
+
         
         lerp = lambda a, b, t: (1 - t) * a + t * b # Thanks laundmo for example https://gist.github.com/laundmo/b224b1f4c8ef6ca5fe47e132c8deab56
         scale_factor = lerp(0 ,1,view_distance / 10)
@@ -564,6 +566,7 @@ class AdvancedTransform(Operator):
         self.Event = bpy.types.Event
         """Temp Variable for saving event"""
 
+        self.BMesh = None
         self.ActionsState = ActionsState()
         self.ORI = ORI()
         self.UserSettings = UserSettings()
@@ -894,7 +897,8 @@ class AdvancedMove(AdvancedTransform):
         self.header_text = 'Drag LMB constraint axis, RMB translate by two axis, MMB free translate, SPACE free translate with snap and rotate along normal, Shift tweak new selection, Alt Current selection'
         self.toolName = "Advanced Move"
         self.If_Alt_Cond =   lambda event:   self.If_Alt(event) and (self.If_LM(event) or self.If_RM(event) or self.If_MM(event))
-        self.If_Shift_Cond = lambda event: self.If_Shift(event) and (self.If_LM(event) or self.If_RM(event) or self.If_MM(event))
+        # self.If_Shift_Cond = lambda event: self.If_Shift(event) and (self.If_LM(event) or self.If_RM(event) or self.If_MM(event))
+        self.If_Shift_Cond = lambda event: self.If_Shift(event)
 
     def AfterLeftMouseAction(self, event):
         axis = GetMouseDirection(self.OldMousePos, self.NewMousePos, self.TransfromOrientationMatrix)
@@ -916,20 +920,60 @@ class AdvancedMove(AdvancedTransform):
         SetConstarin.SetMoveNoConstrain()
         return self.ORI.FINISHED
     def AfterShiftAction(self, event):
-        if context.mode == "EDIT_MESH":
-            bpy.ops.mesh.select_all(action='DESELECT')
-        else:
-            bpy.ops.object.select_all(action='DESELECT')
-        bpy.ops.view3d.select('INVOKE_DEFAULT', extend=True, deselect=False, enumerate=False, toggle=False)
-        if self.If_LM(event):
-            self.AfterLeftMouseAction(event)
-        if self.If_RM(event):
-            self.AfterRightMouseAction(event)
-        if self.If_MM(event):
-            self.AfterMiddleMouseAction(event)
-        self.ActionsState.Shift = False
-        self.Expected_Action = None
-        return self.ORI.FINISHED
+        # if context.mode == "EDIT_MESH":
+        #     bpy.ops.mesh.select_all(action='DESELECT')
+        # else:
+        #     bpy.ops.object.select_all(action='DESELECT')
+        # bpy.ops.view3d.select('INVOKE_DEFAULT', extend=True, deselect=False, enumerate=False, toggle=False)
+        # if self.If_LM(event):
+        #     self.AfterLeftMouseAction(event)
+        # if self.If_RM(event):
+        #     self.AfterRightMouseAction(event)
+        # if self.If_MM(event):
+        #     self.AfterMiddleMouseAction(event)
+        # self.ActionsState.Shift = False
+        # self.Expected_Action = None
+
+        context = bpy.context
+        depsgraph = context.evaluated_depsgraph_get()
+        region = context.region
+        rv3d = context.region_data
+        camera_location = context.region_data.view_matrix.inverted().to_translation()
+        
+        dir = (self.NewMousePos - camera_location).normalized()
+
+        mouse_vector = view3d_utils.region_2d_to_vector_3d(region,rv3d, self.NewMousePos)
+        RESULT, LOCATION, NORMAL, INDEX, OBJECT, MATRIX = context.scene.ray_cast(depsgraph, origin=camera_location, direction=dir)
+        points = []
+        normals = []
+        if RESULT:
+            for e in OBJECT.data.polygons[INDEX].edge_keys:
+                    normals.append((OBJECT.data.vertices[e[0]].normal))
+                    normals.append((OBJECT.data.vertices[e[1]].normal))
+                    normals.append((normals[-1] - normals[-2]).normalized())
+
+                    v1 = MATRIX @ OBJECT.data.vertices[e[0]].co
+                    v2 = MATRIX @ OBJECT.data.vertices[e[1]].co
+                    edge = (v1 + v2)/2
+                    points.append(v1)
+                    points.append(v2)
+                    points.append(edge)
+
+            normals.append(NORMAL)
+
+            center = sum(points, mathutils.Vector()) / len(points)
+            points.append(center)
+
+            closest_index = points.index(min(points, key=lambda v: (v - LOCATION).length))
+            
+            bpy.context.scene.cursor.location=points[closest_index]
+            self.PivotPoint = GetPivotPointPoistion()
+
+            dir = normals[closest_index].to_track_quat('Z', 'Y').to_matrix().to_4x4()
+            rot = dir.to_euler()
+            bpy.context.scene.cursor.rotation_euler=rot
+
+        return self.ORI.RUNNING_MODAL
     def AfterAltAction(self, event):
         if self.If_LM(event):
             self.AfterLeftMouseAction(event)
