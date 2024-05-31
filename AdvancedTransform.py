@@ -57,9 +57,10 @@ CirclePointDivider = 3
 RingWidth = 0.25
 RingRadius = 1
 AxisColor = lambda axis, alpha=0.3 : (0.8, 0.2, 0.2, alpha) if axis == 0 else ((0.1, 0.6, 0.1, alpha) if axis == 1 else ((0.0, 0.3, 0.6, alpha) if axis == 2 else (1, 1, 1, alpha)))
-Is_3d = lambda: bpy.context.space_data.type == "VIEW_3D"
 Is_EditMesh = lambda: bpy.context.mode == 'EDIT_MESH'
-
+Is_3d = lambda: bpy.context.space_data.type == "VIEW_3D"
+Is_3d_var = None
+"""Need in cases like filling header whne current context isn't 3d"""
 
 def is_3d_required(func):
     def wrapper(self, *args, **kwargs):
@@ -245,24 +246,27 @@ def GetMouseDirectionAxis3D(pivot, point_from, point_to, matrix):
     region = context.region
     rv3d = context.region_data
     # Get 2d mouse data
-    mouse_start = view3d_utils.location_3d_to_region_2d(region,rv3d, point_from)
-    mouse_end = view3d_utils.location_3d_to_region_2d(region,rv3d, point_to)
-    mouse_dir = (mouse_start - mouse_end).normalized()
+    if Is_3d():
+        mouse_start = view3d_utils.location_3d_to_region_2d(region,rv3d, point_from)
+        mouse_end = view3d_utils.location_3d_to_region_2d(region,rv3d, point_to)
+        mouse_dir = (mouse_start - mouse_end).normalized()
 
-    pivot2d = mouse_end = view3d_utils.location_3d_to_region_2d(region,rv3d, pivot)
+        pivot2d = mouse_end = view3d_utils.location_3d_to_region_2d(region,rv3d, pivot)
 
-
-    # Get 2d matrix directions
-    x = (matrix.col[0].to_3d() * 2 + pivot)
-    y = (matrix.col[1].to_3d() * 2 + pivot)
-    z = (matrix.col[2].to_3d() * 2 + pivot)
-    x = view3d_utils.location_3d_to_region_2d(region,rv3d, x) 
-    x = (x - pivot2d).normalized()
-    y = view3d_utils.location_3d_to_region_2d(region,rv3d, y)
-    y = (y - pivot2d).normalized()
-    z = view3d_utils.location_3d_to_region_2d(region,rv3d, z)
-    z = (z - pivot2d).normalized()
-    axes = [x,y,z]
+        # Get 2d matrix directions
+        x = (matrix.col[0].to_3d() * 2 + pivot)
+        y = (matrix.col[1].to_3d() * 2 + pivot)
+        z = (matrix.col[2].to_3d() * 2 + pivot)
+        x = view3d_utils.location_3d_to_region_2d(region,rv3d, x) 
+        x = (x - pivot2d).normalized()
+        y = view3d_utils.location_3d_to_region_2d(region,rv3d, y)
+        y = (y - pivot2d).normalized()
+        z = view3d_utils.location_3d_to_region_2d(region,rv3d, z)
+        z = (z - pivot2d).normalized()
+        axes = [x,y,z]
+    else:
+        mouse_dir = (point_from - point_to).normalized()
+        axes = [gvx,gvy]
     index_best_axis = [abs(mouse_dir.dot(i)) for i in axes]
     index_best_axis_index = index_best_axis.index(max(index_best_axis))
     return index_best_axis_index
@@ -393,7 +397,7 @@ def SpawnCursorByRaycast(mouse_position, set_poisition = False, set_orientation 
 class Headers():
     def MoveHeader(self, context):
         layout = self.layout
-        if Is_3d():
+        if Is_3d_var:
             layout.label(text="Axis Constrain", icon="MOUSE_LMB")
             layout.label(text="Plane Constrain", icon="MOUSE_RMB")
             layout.label(text="Free Move", icon="MOUSE_MMB")
@@ -407,7 +411,7 @@ class Headers():
 
     def ScaleHeader(self, context):
         layout = self.layout
-        if Is_3d():
+        if Is_3d_var:
             layout.label(text="Axis Constrain", icon="MOUSE_LMB")
             layout.label(text="Plane Constrain", icon="MOUSE_RMB")
             layout.label(text="Free Scale", icon="MOUSE_MMB")
@@ -424,7 +428,7 @@ class Headers():
 
     def RotationHeader(self, context):
         layout = self.layout
-        if Is_3d():
+        if Is_3d_var:
             layout.label(text="Axis Rotate With Step", icon="MOUSE_LMB")
             layout.label(text="Axis Rotate", icon="MOUSE_RMB")
             layout.label(text="View Rotate", icon="MOUSE_MMB")
@@ -1044,6 +1048,8 @@ class AdvancedTransform(Operator):
 
     def __init__(self):
         super().__init__()
+        global Is_3d_var
+        Is_3d_var = Is_3d()
         self.Toolname = "BaseClass"
         self._header = None
         self.SkipFrameValue = 4
@@ -1170,7 +1176,7 @@ class AdvancedTransform(Operator):
 
     def PovitDriver3D(self, pivot=False, orientation=False):
         """Use inside 'Before' finction with super()"""
-        position, rotation = SpawnCursorByRaycast(self.OldMousePos, set_poisition=True)
+        position, rotation = SpawnCursorByRaycast(self.OldMousePos, set_poisition=True, set_orientation=True)
         if position!= None:
             if pivot:
                 #SetCursorPosition(position)
