@@ -1,9 +1,5 @@
-# context.area: VIEW_3D
 import math
-
-
 import blf
-
 import bmesh
 import bpy
 import gpu
@@ -17,13 +13,6 @@ from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix
 from mathutils import Vector as V
 from mathutils.geometry import intersect_line_plane
-
-
-# KE MODs : changed RELEASE modal events to "if not event.is_repeat" in AdvMove op, (and in Scale)
-# also some reworking in the modal LMB move
-# and had to re-arrange a bit in LMB AdvScale op.
-# Just placeholder stuff for basic functionality until better days for Vlad!
-# 0.4 = blender 4.0 compat fixes
 
 bl_info = {
     "name": "Advanced Transform 2",
@@ -167,6 +156,19 @@ def GetPivotPointPoistion():
     SetCursorPosition(original_cursore_position)
     return GetCursorPosition(region=True) if condition('CURSOR') else new_pivot_point
 
+def MakeCustomTransformOrientation(use_view=False):
+    try: # Blender can't make custom transform orientation if selected all elements 
+        matrix_transform_orientation = Matrix()
+        temp = bpy.context.scene.transform_orientation_slots[0].type
+        bpy.ops.transform.create_orientation(name="AdvancedTransform", use_view=use_view, use=True,overwrite=True)
+        if bpy.context.scene.transform_orientation_slots[0].type == "AdvancedTransform":
+            matrix_transform_orientation = bpy.context.scene.transform_orientation_slots[0].custom_orientation.matrix.copy()
+            bpy.ops.transform.delete_orientation()
+            bpy.context.scene.transform_orientation_slots[0].type = temp
+            return matrix_transform_orientation
+    except: 
+        return matrix_transform_orientation
+
 def GetTransfromOrientationMatrix():
     """Because there is no way to get the current transformation matrix, I have to use this code"""
 
@@ -180,22 +182,9 @@ def GetTransfromOrientationMatrix():
         if bpy.context.mode == 'OBJECT':
             matrix_transform_orientation = bpy.context.active_object.rotation_euler.to_matrix().copy()
         elif bpy.context.mode == 'EDIT_MESH':
-            try: # Blender can't make custom transform orientation if selected all elements 
-                temp = bpy.context.scene.transform_orientation_slots[0].type
-                bpy.ops.transform.create_orientation(name="AdvancedTransform", use_view=False, use=True,overwrite=True)
-                if bpy.context.scene.transform_orientation_slots[0].type == "AdvancedTransform":
-                    matrix_transform_orientation = bpy.context.scene.transform_orientation_slots[0].custom_orientation.matrix.copy()
-                    bpy.ops.transform.delete_orientation()
-                    bpy.context.scene.transform_orientation_slots[0].type = temp
-            except: 
-                matrix_transform_orientation = Matrix()
+            matrix_transform_orientation = MakeCustomTransformOrientation()
     elif condition('VIEW'):
-        temp = bpy.context.scene.transform_orientation_slots[0].type
-        bpy.ops.transform.create_orientation(name="AdvancedTransform", use_view=True, use=True, overwrite=True)
-        if bpy.context.scene.transform_orientation_slots[0].type == "AdvancedTransform":
-            matrix_transform_orientation = bpy.context.scene.transform_orientation_slots[0].custom_orientation.matrix.copy()
-            bpy.ops.transform.delete_orientation()
-            bpy.context.scene.transform_orientation_slots[0].type = temp
+        matrix_transform_orientation = MakeCustomTransformOrientation(use_view=True)
     elif condition('CURSOR'):
         matrix_transform_orientation = bpy.context.scene.cursor.matrix.copy()
     else:
@@ -398,6 +387,8 @@ def QuickMoveToMouse(mouse_position):
     bpy.ops.view3d.snap_selected_to_cursor(use_offset=True)
     SetCursorPosition(temp_cursor_pos)
 
+#------------------Utulity------------------------#
+
 class Headers():
     def MoveHeader(self, context):
         layout = self.layout
@@ -451,7 +442,6 @@ class Headers():
     def ZeroScaleHeader(self, context):
         bpy.context.workspace.status_text_set_internal("")
 
-#------------------Utulity------------------------#
 class ShaderUtility():
     def __init__(self, matrix: Matrix, pivot: V, axis: str):
         self.UpdateData(matrix, pivot, axis)
@@ -1142,10 +1132,10 @@ class AdvancedTransform(bpy.types.Operator):
         self.If_Spcae_Cond = lambda event: self.If_Spcae(event) or self.ActionsState.Space
 
         self.If_Shift = lambda event: event.shift
-        self.If_Shift_Cond = lambda event: self.If_Shift(event) and self.If_MMove(event)
+        self.If_Shift_Cond = lambda event: self.If_Shift(event)# and self.If_MMove(event)
 
         self.If_Alt = lambda event: event.alt
-        self.If_Alt_Cond = lambda event: self.If_Alt(event) and self.If_MMove(event)
+        self.If_Alt_Cond = lambda event: self.If_Alt(event)# and self.If_MMove(event)
 
         self.If_Ctrl = lambda event: event.ctrl
         self.If_Ctrl_Cond = lambda event: self.If_Ctrl(event) or self.ActionsState.Ctrl
@@ -1436,8 +1426,6 @@ class AdvancedTransform(bpy.types.Operator):
         SetCursorPosition(CL)
         return selections
 
-
-
     def invoke(self, context, event):
         self.SetUp(event)
         if self.CheckSelection():  
@@ -1447,7 +1435,7 @@ class AdvancedTransform(bpy.types.Operator):
             print("Cansel", self.Toolname)
             return self.ORI.CANCELLED
 
-#------------------3D Transforms------------------#
+#------------------Transforms------------------#
 class AdvancedMove(AdvancedTransform):
     ''' Advanced move '''
     bl_idname = "transform.advanced_move"
@@ -1573,7 +1561,6 @@ class AdvancedScaleMirror(AdvancedTransform):
         if Is_3d(): self.ARG = lambda:(self.CurrentAxisForMirror, self.TransfromOrientationMatrix.to_3x3(), self.PivotPoint)
         else: self.ARG = lambda:(self.CurrentAxisForMirror, self.TransfromOrientationMatrix.to_3x3(), V(bpy.context.region.view2d.region_to_view(self.PivotPoint.x,self.PivotPoint.y)).to_3d()) # we need in coor in region space instead of view
 
-
         if Is_3d(): self.ArrowOffset = -2.5
         else: self.ArrowOffset = -2.0
         if Is_3d(): self.ArrowScale = 0.75
@@ -1600,13 +1587,11 @@ class AdvancedScaleMirror(AdvancedTransform):
         self.CurrentAxisForMirror = self.GetMouseAxis
 
     def AfterCtrlAction(self, event):
-        #self.ARG = (self.CurrentAxisForMirror, self.TransfromOrientationMatrix.to_3x3(), self.PivotPoint)
         self.ScaleAction(*self.ARG())
         return self.ORI.FINISHED
     
     def AfterMoveMouseAction(self, event):
-        self.CurrentAxisForMirror = self.GetMouseAxis
-        deb(self.CurrentAxisForMirror)
+        self.CurrentAxisForMirror = self.GetMouseAxis()
         bpy.context.area.tag_redraw()
         return self.ORI.RUNNING_MODAL
 
@@ -1644,8 +1629,12 @@ class AdvancedRotation(AdvancedTransform):
         self.RotationDirection = gvz
 
         self.LM_D = lambda event: self.CallAction(event, self.AfterLeftMouseAction, self.BedoreLeftMouseAction) # need for remove delay
-        self.If_LM_Cond = lambda event: self.If_LM(event)# and (self.ActionsState.LeftMouse == False and self.ActionsState.MoveMouse == False)
-        self.If_RM_Cond = lambda event: self.If_RM(event) and (self.ActionsState.MoveMouse == False and self.ActionsState.LeftMouse == False)
+        if not bool(get_addon_preferences().SwapMBForRotation):
+            self.If_LM_Cond = lambda event: self.If_LM(event)
+            self.If_RM_Cond = lambda event: self.If_RM(event) and (self.ActionsState.MoveMouse == False and self.ActionsState.LeftMouse == False)
+        else:
+            self.If_LM_Cond = lambda event: self.If_RM(event) 
+            self.If_RM_Cond = lambda event: self.If_LM(event) and self.StartDrawVector == None
         self.If_MMove_Cond = lambda event: self.If_MMove(event) and (self.ActionsState.LeftMouse or self.ActionsState.Ctrl)
         self.If_Ctrl_Cond = lambda event: event.type == "LEFT_CTRL"
         self.AngleSnappingStep = int(get_addon_preferences().Snapping_Step)
@@ -1699,7 +1688,6 @@ class AdvancedRotation(AdvancedTransform):
     def AfterLeftMouseAction(self, event):
         if event.value == 'PRESS':
             self.InitialRotation(event)
-
             return self.ORI.RUNNING_MODAL
         elif event.value == 'RELEASE':
             return self.ORI.FINISHED
@@ -1710,25 +1698,29 @@ class AdvancedRotation(AdvancedTransform):
     
     @is_3d_required 
     @is_edit_mesh
+    def BeforeCtrlAction(self, event):
+        if self.StartDrawVector is None:
+            self.OldMousePos = self.GML(event)
+          
+    @is_3d_required 
+    @is_edit_mesh
     def AfterCtrlAction(self, event):
-        if event.type == "LEFT_CTRL" and event.value == "PRESS":
+        if event.type == "LEFT_CTRL" and event.value == "PRESS" and self.ActionsState.Ctrl == False:
+            self.ActionsState.Ctrl = True
             self.InitialRotation(event)
             self.obj = bpy.context.active_object
             self.bm = bmesh.from_edit_mesh(self.obj.data)
-            # normal_selected_vertices = [element.normal for element in self.bm.select_history if isinstance(element, bmesh.types.BMVert)]
             self.SelectedVertices = [v for v in self.bm.verts if v.select]
-            normal_selected_vertices = [self.obj.matrix_world @ v.normal for v in self.SelectedVertices]
-            pos_selected_vertices = [self.obj.matrix_world @ v.co for v in self.SelectedVertices]
+            # normal_selected_vertices = [self.obj.matrix_world @ v.normal.copy() for v in self.SelectedVertices]
+            pos_selected_vertices = [self.obj.matrix_world @ v.co.copy() for v in self.SelectedVertices]
 
-            
-            self.BaseNormal = sum(normal_selected_vertices, V()).normalized()
+            self.BaseNormal = MakeCustomTransformOrientation().col[2].to_3d()
+            deb(self.BaseNormal,"self.BaseNormal")
             self.PlaneNormal = self.BaseNormal.copy()
             self.BaseOrigin = sum(pos_selected_vertices, V()) / len(pos_selected_vertices)
 
-
-            deb("","",self.BaseOrigin, self.BaseNormal )
-
-        if event.type == "LEFT_CTRL" and event.value == "RELEASE":
+        if event.type == "LEFT_CTRL" and event.value == "RELEASE" and self.ActionsState.Ctrl == True:
+            self.bm.free()
             return self.ORI.FINISHED
 
         return self.ORI.RUNNING_MODAL
@@ -1744,45 +1736,34 @@ class AdvancedRotation(AdvancedTransform):
         return self.ORI.RUNNING_MODAL
 
     def RotationConstrain(self):
-        deb("","",self.BaseOrigin, self.PlaneNormal)
-        
         for v in self.SelectedVertices:
-            intersection = intersect_line_plane(self.obj.matrix_world @ v.co, self.BaseNormal+v.co, self.BaseOrigin ,self.PlaneNormal, True)
-            print(self.obj.matrix_world @ v.co)
+            intersection = intersect_line_plane(self.obj.matrix_world @ v.co, self.BaseNormal + (self.obj.matrix_world @ v.co), self.PivotPoint ,self.PlaneNormal, True)
             if intersection != None:
-                #intersectin = intersection @ bpy.context.active_object.matrix_world.inverted() 
-                v.co = intersection#self.BaseNormal * (v.co - intersection).length + v.co
-            # else:
-            #     intersection = intersect_line_plane(v.co, self.BaseNormal, self.BaseOrigin ,self.PlaneNormal, False)
-            #     if intersection != None:
-            #         v.co = intersection
-        
-        bmesh.update_edit_mesh(bpy.context.active_object.data)
+                v.co = self.obj.matrix_world.inverted() @ intersection
+                bmesh.update_edit_mesh(self.obj.data)
 
     def Rotatate(self, angle):
         # Check rotation step
         if angle != None and (round(angle / self.AngleSnappingStep) * self.AngleSnappingStep) != 0:
             angle = self.AngleSnappingStep
             
-            deb(self.NormalIntersectionPlane,"self.NormalIntersectionPlane")
+            rotate = lambda angle: mathutils.Matrix.Rotation(math.radians(angle), 3, self.NormalIntersectionPlane)
+
             # find third axis 1 is mouse direction 2 is view direction  and 3 (corss) look at pivot point
             cross=((self.GetDirection(self.NewMousePos) - self.GetDirection(self.OldMousePos))).normalized().cross(self.NormalIntersectionPlane)
 
             # if value biger then 0 counterclock-wise else clockwise
-            # pos_neg = cross.dot(self.GetDirection(self.NewMousePos)) > 0
             pos_neg = self.GetDirection(self.NewMousePos).dot(cross) > 0
             angle = angle*-1 if pos_neg > 0 else angle
-            deb("","",self.PivotPoint, self.NormalIntersectionPlane )
-
 
             self.RotationValue += angle
             # Rotate self.OldMousePos to current rotation
             self.OldMousePos = self.NewMousePos.copy()
-            self.LastAngle = self.LastAngle @ mathutils.Matrix.Rotation(math.radians(angle), 3, self.NormalIntersectionPlane)
+            self.LastAngle = self.LastAngle @ rotate(angle)
             if self.ActionsState.LeftMouse:
                 SetConstarin.SetRotationOnlyAT(angle*-1 , self.ViewAxisInMatrix)
             elif self.ActionsState.Ctrl:
-                self.PlaneNormal = self.PlaneNormal @ mathutils.Matrix.Rotation(math.radians(angle), 3, self.NormalIntersectionPlane)
+                self.PlaneNormal = self.PlaneNormal @ rotate(angle)
                 self.RotationConstrain()
 
 addon_keymaps = []
@@ -1801,7 +1782,6 @@ def get_hotkey_entry_item(km, kmi_value):
         if km.keymap_items[i].idname == kmi_value:
             return km_item
     return None
-
 
 def add_hotkey():
     user_preferences = bpy.context.preferences
@@ -1831,9 +1811,6 @@ def add_hotkey():
     kmi2.active = True
     addon_keymaps.append((km2, kmi2))
 
-
-
-
 class AdvancedTransform_Add_Hotkey(bpy.types.Operator):
     """ Add hotkey entry """
     bl_idname = "advanced_transform.add_hotkey"
@@ -1845,7 +1822,6 @@ class AdvancedTransform_Add_Hotkey(bpy.types.Operator):
 
         self.report({'INFO'}, "Hotkey added in User Preferences -> Input -> Screen -> Screen (Global)")
         return {'FINISHED'}
-
 
 def remove_hotkey():
     """ clears all addon level keymap hotkeys stored in addon_keymaps """
@@ -1860,7 +1836,6 @@ def remove_hotkey():
             bpy.context.window_manager.keyconfigs.addon.keymaps['3D View Generic'].keymap_items.remove(i)
         elif i.name == 'Advanced Rotation' or i.name == 'VIEW3D_OT_advancedmove':
             bpy.context.window_manager.keyconfigs.addon.keymaps['3D View Generic'].keymap_items.remove(i)
-
 
 class AdvancedTransformPref(bpy.types.AddonPreferences):
     bl_idname = __name__
@@ -1891,6 +1866,12 @@ class AdvancedTransformPref(bpy.types.AddonPreferences):
         default=False,
         description="You can do constrain by 3 axes",
     )
+    SwapMBForRotation: BoolProperty(
+        name="Swap LMB and RMB for rotation",
+        default=False,
+        description="Swap LMB and RMB for rotation",
+    )
+
 
     def draw(self, context):
         layout = self.layout
@@ -1898,9 +1879,11 @@ class AdvancedTransformPref(bpy.types.AddonPreferences):
         row1 = box0.row()
         row2 = box0.row()
         row3 = box0.row()
+        row4 = box0.row()
         row1.prop(self, "Snapping_Step")
         # row2.prop(self, "Use_Advanced_Transform")
         row3.prop(self, "MultiAxisDrag")
+        row4.prop(self, "SwapMBForRotation")
         # ---------------------------------
         box = layout.box()
         split = box.split()
@@ -1949,7 +1932,6 @@ class AdvancedTransformPref(bpy.types.AddonPreferences):
         else:
             col2.label("No hotkey entry found")
             col2.operator(AdvancedTransform_Add_Hotkey.bl_idname, text="Add hotkey entry", icon='ZOOMIN')
-
 
 class SetConstarin():
     @staticmethod
