@@ -316,7 +316,9 @@ def SpawnCursorByRaycast(mouse_position, set_poisition = False, set_orientation 
     depsgraph = context.evaluated_depsgraph_get()
     region = context.region
     rv3d = context.region_data
-    camera_location = context.region_data.view_matrix.inverted().to_translation()
+    context.region_data.view_location
+    camera_location = context.region_data.view_matrix.inverted().to_translation().to_3d()
+    deb(camera_location,"camera_location")
     mouse_direction = (mouse_position - camera_location).normalized()
 
     mouse_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, mouse_position)
@@ -437,10 +439,14 @@ class Headers():
             layout.label(text="Axis Rotation", icon="MOUSE_RMB")
             layout.label(text="Temporary Pivot", icon="EVENT_SHIFT")
 
-    def MirrorHeader(self, context):
-        bpy.context.workspace.status_text_set_internal("")
-    def ZeroScaleHeader(self, context):
-        bpy.context.workspace.status_text_set_internal("")
+    def RotationStepOff(self, context):
+        layout = self.layout
+        step_value = str(int(get_addon_preferences().Snapping_Step))
+        layout.label(text="Step Rotation " + step_value + " On", icon="EVENT_SHIFT")
+    def RotationStepOn(self, context):
+        layout = self.layout
+        layout.label(text="Step Rotation Off", icon="EVENT_SHIFT")
+
 
 class ShaderUtility():
     def __init__(self, matrix: Matrix, pivot: V, axis: str):
@@ -753,7 +759,7 @@ class ShaderUtility():
             pivot_2d = self.Pivot
             
         mouse_2d = (mouse_2d - pivot_2d).normalized() * 30.0 + mouse_2d
-        text = str(text)+"°"
+        text = f"{text:.1f}"+"°"
         blf.size(0, 20) 
         d = blf.dimensions(0, str(text))
         blf.position(0, mouse_2d.x - (d[0]/2), mouse_2d.y,0)
@@ -1171,7 +1177,7 @@ class AdvancedTransform(bpy.types.Operator):
 
     def PovitDriver3D(self, pivot=False, orientation=False):
         """Use inside 'Before' finction with super()"""
-        position, rotation = SpawnCursorByRaycast(self.OldMousePos, set_poisition=True, set_orientation=True)
+        position, rotation = SpawnCursorByRaycast(self.OldMousePos, set_poisition=pivot, set_orientation=orientation)
         if position!= None:
             if pivot:
                 #SetCursorPosition(position)
@@ -1306,10 +1312,10 @@ class AdvancedTransform(bpy.types.Operator):
             deb(self.PivotPoint)
 
     def SetHeader(self, fun):
-        _header = bpy.types.STATUSBAR_HT_header.draw
-        bpy.types.STATUSBAR_HT_header.draw = fun
-
-        return _header
+        if fun != None:
+            _header = bpy.types.STATUSBAR_HT_header.draw
+            bpy.types.STATUSBAR_HT_header.draw = fun
+            return _header
 
     def AdditionalSetup(self, event):
         pass
@@ -1326,7 +1332,6 @@ class AdvancedTransform(bpy.types.Operator):
             self.report({'INFO'}, "") # Need for update status bar
             self._handle_2d = bpy.types.SpaceImageEditor.draw_handler_add(self.DrawCallBack2D, (context, ), 'WINDOW','POST_PIXEL')
         
-
     def AdditionalExit(self):
         pass
     def Exit(self):
@@ -1548,11 +1553,12 @@ class AdvancedScaleMirror(AdvancedTransform):
     def __init__(self) -> None:
         super().__init__()
         self.Toolname = "Scale Mirror"
-        self._header = Headers.MirrorHeader
+        self._header = None
         self.CurrentAxisForMirror = None
         self.If_MMove_Cond = lambda event: self.If_MMove(event)
         self.If_Ctrl_Cond = lambda event: not self.If_Ctrl(event) #(event.type == "LEFT_CTRL")# and event.value == "RELEASE")
         self.UpdateShaderUtilityARG = lambda: (self.ShaderUtility.UpdateData(self.TransfromOrientationMatrix, self.PivotPoint, self.CurrentAxisForMirror))
+        self._header
         
         self.UserSettings.UseReturnAllSettings = False
 
@@ -1603,7 +1609,7 @@ class AdvancedScaleZero(AdvancedScaleMirror):
     def __init__(self) -> None:
         super().__init__()
         self.Toolname = "Scale Zero"
-        self._header = Headers.ZeroScaleHeader
+        self._header = None
         self.If_Spcae_Cond = lambda event: False
         self.If_Ctrl_Cond = lambda event: self.If_Spcae(event) and event.value == "RELEASE"
         self.ScaleAction = SetConstarin.SetScaleOnlySetZero
@@ -1662,6 +1668,8 @@ class AdvancedRotation(AdvancedTransform):
         if self.NewMousePos.length != 0:
             self.ShaderUtility.DrawTextInderMouse(self.NewMousePos, self.RotationValue)
 
+        
+
     def InitialRotation(self, event):
         self.GetMainData()
         self.ActionsState.MoveMouse = True
@@ -1707,7 +1715,8 @@ class AdvancedRotation(AdvancedTransform):
     def AfterCtrlAction(self, event):
         if event.type == "LEFT_CTRL" and event.value == "PRESS" and self.ActionsState.Ctrl == False:
             self.ActionsState.Ctrl = True
-            self.InitialRotation(event)
+            self.InitialRotation(event) 
+            self.SetHeader(Headers.RotationStepOn)
             self.obj = bpy.context.active_object
             self.bm = bmesh.from_edit_mesh(self.obj.data)
             self.SelectedVertices = [v for v in self.bm.verts if v.select]
@@ -1735,6 +1744,26 @@ class AdvancedRotation(AdvancedTransform):
         self.Rotatate(angle)
         return self.ORI.RUNNING_MODAL
 
+    def BeforeShiftAction(self, event):
+        if self.ActionsState.MoveMouse == False:
+            super().BeforeShiftAction(event)
+        else:
+            self.If_Shift_Cond = lambda event:  event.type == "LEFT_SHIFT" and event.value == "PRESS"
+            if self.AngleSnappingStep == 1:
+                step_value = int(get_addon_preferences().Snapping_Step)
+                self.SetHeader(Headers.RotationStepOn)
+                # Compensation rotation for step round
+                angle = (self.RotationValue % step_value)
+                angle = step_value - angle if angle > step_value / 2 else angle * -1
+                
+                self.Rotatate(angle)
+                self.AngleSnappingStep = step_value
+            else: 
+                self.SetHeader(Headers.RotationStepOff)
+                self.AngleSnappingStep = 1
+            return self.ORI.RUNNING_MODAL
+
+
     def RotationConstrain(self):
         for v in self.SelectedVertices:
             intersection = intersect_line_plane(self.obj.matrix_world @ v.co, self.BaseNormal + (self.obj.matrix_world @ v.co), self.PivotPoint ,self.PlaneNormal, True)
@@ -1744,8 +1773,11 @@ class AdvancedRotation(AdvancedTransform):
 
     def Rotatate(self, angle):
         # Check rotation step
-        if angle != None and (round(angle / self.AngleSnappingStep) * self.AngleSnappingStep) != 0:
-            angle = self.AngleSnappingStep
+        if (angle != None and (round(angle / self.AngleSnappingStep) * self.AngleSnappingStep) != 0) or self.AngleSnappingStep == 1:
+            if self.AngleSnappingStep != 1:
+                angle = self.AngleSnappingStep
+            else:
+                angle = round(angle)
             
             rotate = lambda angle: mathutils.Matrix.Rotation(math.radians(angle), 3, self.NormalIntersectionPlane)
 
