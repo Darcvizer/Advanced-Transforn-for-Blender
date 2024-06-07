@@ -240,7 +240,7 @@ def GetMouseDirectionAxis3D(pivot, point_from, point_to, matrix):
 
         pivot2d = mouse_end = view3d_utils.location_3d_to_region_2d(region,rv3d, pivot)
 
-        # Get 2d matrix directions
+        # Translate orientation direction 3d to 2d
         x = (matrix.col[0].to_3d() * 2 + pivot)
         y = (matrix.col[1].to_3d() * 2 + pivot)
         z = (matrix.col[2].to_3d() * 2 + pivot)
@@ -314,26 +314,24 @@ def SpawnCursorByRaycast(mouse_position, set_poisition = False, set_orientation 
     
     context = bpy.context
     depsgraph = context.evaluated_depsgraph_get()
-    region = context.region
-    rv3d = context.region_data
-    context.region_data.view_location
+    # region = context.region
+    # rv3d = context.region_data
     camera_location = context.region_data.view_matrix.inverted().to_translation().to_3d()
-    deb(camera_location,"camera_location")
     mouse_direction = (mouse_position - camera_location).normalized()
 
-    mouse_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, mouse_position)
+    #mouse_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, mouse_position)
     RESULT, LOCATION, NORMAL, INDEX, OBJECT, MATRIX = context.scene.ray_cast(depsgraph, origin=camera_location, direction=mouse_direction)
 
     points = {"vertices":[], "edges":[], "face":[]}
     normals = {"vertices":[], "edges":[], "face":[]}
     
     if RESULT:
+        temp_cursor_pos = GetCursorPosition()
         if Is_EditMesh():
             if not OBJECT in SpawnCursorByRaycast.objects:
                 OBJECT.update_from_editmode()
                 SpawnCursorByRaycast.objects.append(OBJECT)
-        
-        #get_length = lambda e, lengthest_edge: e if (OBJECT.data.vertices[e[0]].co - OBJECT.data.vertices[e[1]].co).length > (OBJECT.data.vertices[lengthest_edge[0]].co - OBJECT.data.vertices[lengthest_edge[1]].co).length else lengthest_edge
+
         lengthest_edge = [gv0,gv0]
         vectors = []
         for e in OBJECT.data.polygons[INDEX].edge_keys:
@@ -371,11 +369,11 @@ def SpawnCursorByRaycast(mouse_position, set_poisition = False, set_orientation 
                 y = (lengthest_edge[1] - lengthest_edge[0]).normalized()
                 matrix = create_orientation_matrix(closest_normal, y).to_4x4()
             elif closest_key == "edges":
-                deb("edges",closest_normal)
                 matrix = create_orientation_matrix(closest_normal, normals["face"][0]).to_4x4()
             else:
                 matrix = create_orientation_matrix(closest_normal).to_4x4()
             bpy.context.scene.cursor.matrix = matrix
+            SetCursorPosition(temp_cursor_pos)
         if set_poisition:
             SetCursorPosition(closest_pivot)
 
@@ -402,7 +400,6 @@ class Headers():
             layout.label(text="Temporary Orientation", icon="EVENT_ALT")
             layout.label(text="Free Move With Snapping to Surface", icon="EVENT_SPACEKEY")
         else:
-            deb("Is 2d")
             layout.label(text="Axis Constrain", icon="MOUSE_LMB")
             layout.label(text="Plane Move", icon="MOUSE_RMB")
             layout.label(text="Temporary Pivot", icon="EVENT_SHIFT")
@@ -690,10 +687,7 @@ class ShaderUtility():
         markers= self.RTM(markers)
         markers = self.ViewSize(markers)
 
-
-        # Rotate ring to First mouse clic
-        SignedAngle= lambda v1, v2, axis: v1.angle(v2) * (1 if axis.dot(v1.cross(v2)) >= 0 else -1)
-        angl = SignedAngle(lines_5_deg[0], DirectionVector, self.DirectionVector) * -1
+        angl = self.SignedAngle((markers[-1] - markers[-2]).normalized(), DirectionVector, self.DirectionVector) * -1
         markers = self.ApplyRotationWithOffset(angl, markers, self.DirectionVector)
 
         return markers
@@ -823,6 +817,7 @@ class ShaderUtility():
 
     def BatchMirror_Zero(self, arrow_offset, scale = 0.75):
             
+            color = AxisColor(self.AxisInMatrix)
             arrow_faces, contur_arrow = self.ShapeArrow(arrow_offset, flip_arrow=False, scale=scale)
             arrow_2_faces, contur_2_arrow = self.ShapeArrow(arrow_offset, flip_arrow=True, scale=scale)
             if Is_3d():
@@ -834,15 +829,15 @@ class ShaderUtility():
 
             if Is_3d():
                 batch = batch_for_shader(shader, 'TRIS', {"pos": plane_faces})
-                shader.uniform_float("color", (0.0, 0.3, 0.6, 0.3))
+                shader.uniform_float("color", color)
                 batch.draw(shader)
 
             batch = batch_for_shader(shader, 'TRIS', {"pos": arrow_faces})
-            shader.uniform_float("color", (0.0, 0.3, 0.6, 0.3))
+            shader.uniform_float("color", color)
             batch.draw(shader)
 
             batch = batch_for_shader(shader, 'TRIS', {"pos": arrow_2_faces})
-            shader.uniform_float("color", (0.0, 0.3, 0.6, 0.3))
+            shader.uniform_float("color", color)
             batch.draw(shader)
 
             shader = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
@@ -920,7 +915,7 @@ class ShaderUtility():
         batch.draw(shader)
 
         shader.uniform_float("color", (1.0, 1.0, 1.0, 0.5))
-        batch = batch_for_shader(shader, 'LINES', {"pos": [povit, start_drawing_vector]})
+        batch = batch_for_shader(shader, 'LINES', {"pos": [povit, self.ViewSize([start_drawing_vector*RingRadius+self.Pivot])[0]]})
         batch.draw(shader)
         batch = batch_for_shader(shader, 'LINES', {"pos": [povit, current_mouse_pos]})
         batch.draw(shader)
@@ -933,6 +928,30 @@ class ShaderUtility():
 
         # batch = batch_for_shader(shader, 'LINES', {"pos": [povit, self.Matrix.col[2].to_3d()*2+povit]})
         # batch.draw(shader)
+
+    def BatchSelectOrientation(self, radius=RingRadius, offset=RingWidth, is_draw=False):
+        shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+        gpu.state.blend_set("ALPHA")
+        batch = batch_for_shader(shader, 'TRIS', {"pos": [gv0,gv0,gv0]})
+
+        ring_faces, outer_contour, inner_contour = self.ShapeRing(V((1,1,1)), radius, offset)
+
+        batch = batch_for_shader(shader, 'TRIS', {"pos": ring_faces})
+        shader.uniform_float("color", (0.8 ,0.7, 0.0, 0.8))
+        batch.draw(shader)
+    
+
+        # shader = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+        # shader.uniform_float("lineWidth", 1)
+        # shader.uniform_float("viewportSize", (bpy.context.area.width, bpy.context.area.height))
+
+        # shader.uniform_float("color", (0.8 ,0.7, 0.0, 1.0))
+        # batch = batch_for_shader(shader, 'LINES', {"pos": outer_contour})
+        # batch.draw(shader)
+        # shader.uniform_float("color", (0.8 ,0.7, 0.0, 1.0))
+        # batch = batch_for_shader(shader, 'LINES', {"pos": inner_contour})
+        # batch.draw(shader)
+
 
 class UserSettings():
     def __init__(self):
@@ -1096,6 +1115,13 @@ class AdvancedTransform(bpy.types.Operator):
             if Is_3d():
                 if self.NormalIntersectionPlane != None and self.ViewAxisInMatrix != None:
                     self.ShaderUtility.BatchGizmo3D(self.ViewAxisInMatrix)
+
+                    if self.ActionsState.Alt:
+                        if self.__position_for_orientation != None:
+                            mat = GetViewDirection().to_track_quat('Z', 'Y').to_matrix().to_4x4()
+                            self.ShaderUtility.UpdateData(mat, self.__position_for_orientation, 2)
+                            self.ShaderUtility.BatchSelectOrientation(0.075, 0.05)
+                    
             else:
                 self.ShaderUtility.BatchGizmo2D(self.PivotPoint)
 
@@ -1137,10 +1163,10 @@ class AdvancedTransform(bpy.types.Operator):
         self.If_Spcae = lambda event: event.type == 'SPACE'
         self.If_Spcae_Cond = lambda event: self.If_Spcae(event) or self.ActionsState.Space
 
-        self.If_Shift = lambda event: event.shift
+        self.If_Shift = lambda event: event.shift or event.type == 'LEFT_SHIFT'
         self.If_Shift_Cond = lambda event: self.If_Shift(event)# and self.If_MMove(event)
 
-        self.If_Alt = lambda event: event.alt
+        self.If_Alt = lambda event: event.alt or event.type == 'LEFT_ALT'
         self.If_Alt_Cond = lambda event: self.If_Alt(event)# and self.If_MMove(event)
 
         self.If_Ctrl = lambda event: event.ctrl
@@ -1177,17 +1203,15 @@ class AdvancedTransform(bpy.types.Operator):
 
     def PovitDriver3D(self, pivot=False, orientation=False):
         """Use inside 'Before' finction with super()"""
-        position, rotation = SpawnCursorByRaycast(self.OldMousePos, set_poisition=pivot, set_orientation=orientation)
-        if position!= None:
+        self.__position_for_orientation, rotation = SpawnCursorByRaycast(self.OldMousePos, set_poisition=pivot, set_orientation=orientation)
+        if self.__position_for_orientation!= None:
             if pivot:
-                #SetCursorPosition(position)
                 bpy.context.scene.tool_settings.transform_pivot_point = 'CURSOR'
                 bpy.context.scene.tool_settings.snap_target = 'CENTER'
             if orientation:
-                SetCursorPosition(position)
                 bpy.context.scene.transform_orientation_slots[0].type = 'CURSOR'
-        self.GetMainData()
-        # else: bpy.ops.view3d.cursor3d()
+        #self.GetMainData()
+
 
     # We can use actions before delay and after delay
     def BedoreLeftMouseAction(self, event):
@@ -1232,11 +1256,11 @@ class AdvancedTransform(bpy.types.Operator):
     def BeforeAltAction(self, event):
         self.OldMousePos = self.GML(event)
         self.ActionsState.Alt = True
-        # self.cursor_temp_value = GetCursorPosition()
         self.PovitDriver(orientation=True)
     def AfterAltAction(self, event):
-        self.ActionsState.Alt = False
-        # SetCursorPosition(self.cursor_temp_value)
+        if event.type == "LEFT_ALT":
+            self.ActionsState.Alt = False
+            bpy.context.region.tag_redraw()
         return self.ORI.RUNNING_MODAL
     def BeforeCtrlAction(self, event):
         self.OldMousePos = self.GML(event)
@@ -1309,7 +1333,6 @@ class AdvancedTransform(bpy.types.Operator):
             self.ViewAxisInMatrix = GetBestAxisInMatrix(self.TransfromOrientationMatrix, self.NormalIntersectionPlane)
         else:
             self.PivotPoint = GetPivotPointPoistion()
-            deb(self.PivotPoint)
 
     def SetHeader(self, fun):
         if fun != None:
@@ -1573,15 +1596,20 @@ class AdvancedScaleMirror(AdvancedTransform):
         else: self.ArrowScale = 75
 
         self.GetMainDataOnce = True
-        self.GetMouseAxis = lambda: GetMouseDirectionAxis(self.PivotPoint ,self.OldMousePos, self.PivotPoint, self.TransfromOrientationMatrix, force_multi_axis=True)
+        self.GetAxis = lambda: GetMouseDirectionAxis(self.PivotPoint ,self.OldMousePos, self.PivotPoint, self.TransfromOrientationMatrix, force_multi_axis=True)
 
     def DrawCallBackBatch(self):
         if self.CurrentAxisForMirror != None:
             self.ShaderUtility.BatchMirror_Zero(self.ArrowOffset, self.ArrowScale)
     
+    @is_edit_mesh
     def AdditionalExit(self):
-        if Is_EditMesh():
+        old_mat_dir = self.__matrix_for_compaire_normals.col[self.CurrentAxisForMirror].to_3d().normalized()
+        new_mat_dir = MakeCustomTransformOrientation().col[self.CurrentAxisForMirror].to_3d().normalized()
+        dot = old_mat_dir.dot(new_mat_dir)
+        if dot < 0.8:
             bpy.ops.mesh.flip_normals()
+
 
     def GetMainData(self):
         if self.GetMainDataOnce:
@@ -1589,15 +1617,16 @@ class AdvancedScaleMirror(AdvancedTransform):
             self.GetMainDataOnce = False
 
     def AdditionalSetup(self, event):
+        self.__matrix_for_compaire_normals = MakeCustomTransformOrientation()
         self.OldMousePos = self.GML(event)
-        self.CurrentAxisForMirror = self.GetMouseAxis
+        self.CurrentAxisForMirror = self.GetAxis()
 
     def AfterCtrlAction(self, event):
         self.ScaleAction(*self.ARG())
         return self.ORI.FINISHED
     
     def AfterMoveMouseAction(self, event):
-        self.CurrentAxisForMirror = self.GetMouseAxis()
+        self.CurrentAxisForMirror = self.GetAxis()
         bpy.context.area.tag_redraw()
         return self.ORI.RUNNING_MODAL
 
@@ -1668,27 +1697,23 @@ class AdvancedRotation(AdvancedTransform):
         if self.NewMousePos.length != 0:
             self.ShaderUtility.DrawTextInderMouse(self.NewMousePos, self.RotationValue)
 
-        
-
     def InitialRotation(self, event):
         self.GetMainData()
         self.ActionsState.MoveMouse = True
         self.StartDrawVector = self.GML(event)
         self.NewMousePos = self.StartDrawVector.copy()
         self.LastAngle = self.GetDirection(self.NewMousePos)
-        # self.ViewAxisInMatrix = GetBestAxisInMatrix(self.TransfromOrientationMatrix, GetViewDirection())
-        # deb(self.ViewAxisInMatrix,"self.ViewAxisInMatrix")
-        # self.RotationDirection = self.TransfromOrientationMatrix.col[self.ViewAxisInMatrix].to_3d()
         self.DrawGizmo = False
 
     def GetMainData(self):
         if self.StartDrawVector is None: # Disable update if we started rotation
             super().GetMainData()
-
+    
+    @is_3d_required
     def AfterMiddleMouseAction(self, event):
         SetConstarin.SetRotationFree()
         return self.ORI.FINISHED
-    
+    @is_3d_required
     def AfterSpaceAction(self, event):
         SetConstarin.trackball()
         return self.ORI.FINISHED
@@ -1724,7 +1749,6 @@ class AdvancedRotation(AdvancedTransform):
             pos_selected_vertices = [self.obj.matrix_world @ v.co.copy() for v in self.SelectedVertices]
 
             self.BaseNormal = MakeCustomTransformOrientation().col[2].to_3d()
-            deb(self.BaseNormal,"self.BaseNormal")
             self.PlaneNormal = self.BaseNormal.copy()
             self.BaseOrigin = sum(pos_selected_vertices, V()) / len(pos_selected_vertices)
 
