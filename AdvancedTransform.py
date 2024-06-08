@@ -18,7 +18,7 @@ bl_info = {
     "name": "Advanced Transform 2",
     "location": "View3D > Advanced Transform 2",
     "description": "Advanced Transform 2",
-    "author": "Vladislav Kindushov(Darcvizer)",
+    "author": "Vladislav Kindushov(Darcvizer), Antony",
     "version": (0, 5, 0),
     "blender": (4, 1, 0),
     "category": "View3D"}
@@ -234,23 +234,27 @@ def GetMouseDirectionAxis3D(pivot, point_from, point_to, matrix):
     rv3d = context.region_data
     # Get 2d mouse data
     if Is_3d():
-        mouse_start = view3d_utils.location_3d_to_region_2d(region,rv3d, point_from)
-        mouse_end = view3d_utils.location_3d_to_region_2d(region,rv3d, point_to)
-        mouse_dir = (mouse_start - mouse_end).normalized()
+        try: #  if coord is behind the origin of a perspective view we get error
+            mouse_start = view3d_utils.location_3d_to_region_2d(region,rv3d, point_from)
+            mouse_end = view3d_utils.location_3d_to_region_2d(region,rv3d, point_to)
+            mouse_dir = (mouse_start - mouse_end).normalized()
 
-        pivot2d = mouse_end = view3d_utils.location_3d_to_region_2d(region,rv3d, pivot)
+            pivot2d = mouse_end = view3d_utils.location_3d_to_region_2d(region,rv3d, pivot)
 
-        # Translate orientation direction 3d to 2d
-        x = (matrix.col[0].to_3d() * 2 + pivot)
-        y = (matrix.col[1].to_3d() * 2 + pivot)
-        z = (matrix.col[2].to_3d() * 2 + pivot)
-        x = view3d_utils.location_3d_to_region_2d(region,rv3d, x) 
-        x = (x - pivot2d).normalized()
-        y = view3d_utils.location_3d_to_region_2d(region,rv3d, y)
-        y = (y - pivot2d).normalized()
-        z = view3d_utils.location_3d_to_region_2d(region,rv3d, z)
-        z = (z - pivot2d).normalized()
-        axes = [x,y,z]
+            # Translate orientation direction 3d to 2d
+            deb(matrix)
+            x = (matrix.col[0].to_3d() * 2 + pivot)
+            y = (matrix.col[1].to_3d() * 2 + pivot)
+            z = (matrix.col[2].to_3d() * 2 + pivot)
+            x = view3d_utils.location_3d_to_region_2d(region,rv3d, x) 
+            x = (x - pivot2d).normalized()
+            y = view3d_utils.location_3d_to_region_2d(region,rv3d, y)
+            y = (y - pivot2d).normalized()
+            z = view3d_utils.location_3d_to_region_2d(region,rv3d, z)
+            z = (z - pivot2d).normalized()
+            axes = [x,y,z]
+        except:
+            return GetMouseDirectionAxisByPlane(point_from, point_to, matrix)
     else:
         mouse_dir = (point_from - point_to).normalized()
         axes = [gvx,gvy]
@@ -276,7 +280,7 @@ def GetMouseDirectionUV(poin1, point2):
     direction = (point2 - poin1).normalized()
     return GetIndexOfMaxValueInVector(direction)
 
-def SpawnCursorByRaycast(mouse_position, set_poisition = False, set_orientation = False, free_meshes=False):
+def SpawnCursorByRaycast(mouse_position, event, set_poisition = False, set_orientation = False, free_meshes=False):
     """Use raycast find the closest element on face
     Return position and rotation(euler)"""
     if free_meshes: SpawnCursorByRaycast.objects = []; return None # it is optimization
@@ -312,15 +316,17 @@ def SpawnCursorByRaycast(mouse_position, set_poisition = False, set_orientation 
             x_axis = right.cross(normal).normalized()
             return Matrix((x_axis, right, normal)).transposed()
     
+    # get the ray from the viewport and mouse
     context = bpy.context
     depsgraph = context.evaluated_depsgraph_get()
-    # region = context.region
-    # rv3d = context.region_data
-    camera_location = context.region_data.view_matrix.inverted().to_translation().to_3d()
-    mouse_direction = (mouse_position - camera_location).normalized()
+    region = context.region
+    rv3d = context.region_data
+    coord = event.mouse_region_x, event.mouse_region_y
+    #Thanks kaio https://devtalk.blender.org/t/pick-material-under-mouse-cursor/6978/7, it help fix bug with orthographic view
+    view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
+    ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
 
-    #mouse_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, mouse_position)
-    RESULT, LOCATION, NORMAL, INDEX, OBJECT, MATRIX = context.scene.ray_cast(depsgraph, origin=camera_location, direction=mouse_direction)
+    RESULT, LOCATION, NORMAL, INDEX, OBJECT, MATRIX = context.scene.ray_cast(depsgraph, origin=ray_origin, direction=view_vector)
 
     points = {"vertices":[], "edges":[], "face":[]}
     normals = {"vertices":[], "edges":[], "face":[]}
@@ -424,16 +430,24 @@ class Headers():
     def RotationHeader(self, context):
         layout = self.layout
         if Is_3d_var:
-            layout.label(text="Step Rotation", icon="MOUSE_LMB")
-            layout.label(text="Axis Rotation", icon="MOUSE_RMB")
+            if bool(get_addon_preferences().SwapMBForRotation):
+                layout.label(text="Axis Rotation", icon="MOUSE_LMB")
+                layout.label(text="Step Rotation", icon="MOUSE_RMB")
+            else:
+                layout.label(text="Step Rotation", icon="MOUSE_LMB")
+                layout.label(text="Axis Rotation", icon="MOUSE_RMB")
             layout.label(text="View Rotation", icon="MOUSE_MMB")
             layout.label(text="Temporary Pivot", icon="EVENT_SHIFT")
             layout.label(text="Temporary Orientation", icon="EVENT_ALT")
             layout.label(text="Constrain Rotation", icon="EVENT_CTRL")
             layout.label(text="Trackball", icon="EVENT_SPACEKEY")
         else:
-            layout.label(text="Step Rotation", icon="MOUSE_LMB")
-            layout.label(text="Axis Rotation", icon="MOUSE_RMB")
+            if bool(get_addon_preferences().SwapMBForRotation):
+                layout.label(text="Step Rotation", icon="MOUSE_RMB")
+                layout.label(text="Rotation", icon="MOUSE_LMB")
+            else:
+                layout.label(text="Step Rotation", icon="MOUSE_LMB")
+                layout.label(text="Rotation", icon="MOUSE_RMB")
             layout.label(text="Temporary Pivot", icon="EVENT_SHIFT")
 
     def RotationStepOff(self, context):
@@ -1089,6 +1103,8 @@ class AdvancedTransform(bpy.types.Operator):
         self.Event = bpy.types.Event
         """Temp Variable for saving event"""
 
+        self.Use_Temporary_Pivot = False
+        self.Use_Temporary_Orientation = False
         self.DrawGizmo = True
 
         self.ActionsState = ActionsState()
@@ -1190,8 +1206,8 @@ class AdvancedTransform(bpy.types.Operator):
         self.Alt_D = lambda event : self.CallAction(event, self.AfterAltAction , self.BeforeAltAction)
         self.Ctrl_D = lambda event : self.CallAction(event, self.AfterCtrlAction , self.BeforeCtrlAction)
 
-    def PovitDriver(self, pivot=False, orientation=False):
-        if Is_3d(): self.PovitDriver3D(pivot, orientation)
+    def PovitDriver(self, event, pivot=False, orientation=False):
+        if Is_3d(): self.PovitDriver3D(event, pivot, orientation)
         else: self.PovitDriver2D()
 
     def PovitDriver2D(self):
@@ -1201,9 +1217,9 @@ class AdvancedTransform(bpy.types.Operator):
         bpy.context.space_data.pivot_point = 'CURSOR'
         bpy.context.scene.tool_settings.snap_target = 'CENTER'
 
-    def PovitDriver3D(self, pivot=False, orientation=False):
+    def PovitDriver3D(self, event, pivot=False, orientation=False):
         """Use inside 'Before' finction with super()"""
-        self.__position_for_orientation, rotation = SpawnCursorByRaycast(self.OldMousePos, set_poisition=pivot, set_orientation=orientation)
+        self.__position_for_orientation, rotation = SpawnCursorByRaycast(self.OldMousePos, event, set_poisition=pivot, set_orientation=orientation)
         if self.__position_for_orientation!= None:
             if pivot:
                 bpy.context.scene.tool_settings.transform_pivot_point = 'CURSOR'
@@ -1247,7 +1263,8 @@ class AdvancedTransform(bpy.types.Operator):
     def BeforeShiftAction(self, event):
         self.OldMousePos = self.GML(event)
         self.ActionsState.Shift = True
-        self.PovitDriver(pivot=True)
+        self.PovitDriver(event , pivot=True)
+        self.Use_Temporary_Pivot = True
         pass
     def AfterShiftAction(self, event):
         self.ActionsState.Shift = False
@@ -1256,7 +1273,8 @@ class AdvancedTransform(bpy.types.Operator):
     def BeforeAltAction(self, event):
         self.OldMousePos = self.GML(event)
         self.ActionsState.Alt = True
-        self.PovitDriver(orientation=True)
+        self.PovitDriver(event, orientation=True)
+        self.Use_Temporary_Orientation = True
     def AfterAltAction(self, event):
         if event.type == "LEFT_ALT":
             self.ActionsState.Alt = False
@@ -1368,7 +1386,7 @@ class AdvancedTransform(bpy.types.Operator):
                 if self._handle_2d: bpy.types.SpaceImageEditor.draw_handler_remove(self._handle_2d, 'WINDOW')
         except:
             pass
-        SpawnCursorByRaycast("",free_meshes=True)
+        SpawnCursorByRaycast("","",free_meshes=True)
         self.SetHeader(self._header)
         bpy.context.area.header_text_set(None)
         self.UserSettings.ReturnAllSettings()
@@ -1475,17 +1493,25 @@ class AdvancedMove(AdvancedTransform):
         self._header = Headers.MoveHeader
 
     def AfterLeftMouseAction(self, event):
-        # axis = GetMouseDirectionAxis(self.OldMousePos, self.NewMousePos, self.TransfromOrientationMatrix)
+        self.EnableSnappingForTemporaryPivot()
         axis = GetMouseDirectionAxis(self.PivotPoint ,self.OldMousePos, self.NewMousePos, self.TransfromOrientationMatrix)
         SetConstarin.SetMoveOnlyOneAxis(axis)
         return self.ORI.FINISHED
     
     def AfterRightMouseAction(self, event):
+        self.EnableSnappingForTemporaryPivot()
         SetConstarin.SetMoveExclude(self.ViewAxisInMatrix)
         return self.ORI.FINISHED
     
+    def EnableSnappingForTemporaryPivot(self):
+        if self.Use_Temporary_Pivot and bool(get_addon_preferences().AutoEnableSpanForMoveAfterTemporaryPivot):
+            bpy.context.scene.tool_settings.snap_elements_base = {'VERTEX', 'EDGE', 'EDGE_MIDPOINT'}
+            bpy.context.scene.tool_settings.snap_target = 'CENTER'
+            bpy.context.scene.tool_settings.use_snap = True
+
     @is_3d_required
     def AfterMiddleMouseAction(self, event):
+        self.EnableSnappingForTemporaryPivot()
         SetConstarin.SetMoveNoConstrainNoSnap()
         return self.ORI.FINISHED
     
@@ -1927,6 +1953,11 @@ class AdvancedTransformPref(bpy.types.AddonPreferences):
         default=False,
         description="Swap LMB and RMB for rotation",
     )
+    AutoEnableSpanForMoveAfterTemporaryPivot: BoolProperty(
+        name="Auto Enable Spaning For Move After Using Temporary Pivot",
+        default=False,
+        description="Auto Enable Spaning For Move After Using Temporary Pivot",
+    )
 
 
     def draw(self, context):
@@ -1936,10 +1967,12 @@ class AdvancedTransformPref(bpy.types.AddonPreferences):
         row2 = box0.row()
         row3 = box0.row()
         row4 = box0.row()
+        row5 = box0.row()
         row1.prop(self, "Snapping_Step")
         # row2.prop(self, "Use_Advanced_Transform")
         row3.prop(self, "MultiAxisDrag")
         row4.prop(self, "SwapMBForRotation")
+        row5.prop(self, "AutoEnableSpanForMoveAfterTemporaryPivot")
         # ---------------------------------
         box = layout.box()
         split = box.split()
@@ -2052,16 +2085,13 @@ class SetConstarin():
     def SetMoveExcludeUV():
         bpy.ops.transform.translate('INVOKE_DEFAULT', constraint_axis=(True, True, False))
 
-
 classes = (AdvancedMove, AdvancedScale, AdvancedRotation,
            AdvancedTransformPref, AdvancedScaleZero, AdvancedScaleMirror, AdvancedTransform_Add_Hotkey)
-
 
 def register():
     for c in classes:
         bpy.utils.register_class(c)
     add_hotkey()
-
 
 def unregister():
     for c in reversed(classes):
