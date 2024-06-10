@@ -325,33 +325,55 @@ def SpawnCursorByRaycast(mouse_position, event, set_poisition = False, set_orien
     #Thanks kaio https://devtalk.blender.org/t/pick-material-under-mouse-cursor/6978/7, it help fix bug with orthographic view
     view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
     ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
+    
+    if bool(get_addon_preferences().LocalObjRayTrace):
+        for i in context.selected_objects:
+            if Is_EditMesh:
+                if not i in SpawnCursorByRaycast.objects:
+                    i.update_from_editmode()
+                    SpawnCursorByRaycast.objects.append(i)
 
-    RESULT, LOCATION, NORMAL, INDEX, OBJECT, MATRIX = context.scene.ray_cast(depsgraph, origin=ray_origin, direction=view_vector)
+            origin = i.matrix_world.inverted() @ ray_origin
+            dir = i.matrix_world.to_3x3().inverted() @ view_vector
+            ray_target = origin + dir
+            Result, Location, Normal, Index = i.ray_cast(origin,dir)
+            if Result:
+                Object = i
+                Matrix_ = i.matrix_world
+                Location = i.matrix_world @ Location
+                Normal =  i.matrix_world.to_3x3() @ Normal
+                break
 
+    if not bool(get_addon_preferences().LocalObjRayTrace) or Result is False:
+        view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
+        ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
+        Result, Location, Normal, Index, Object, Matrix_ = context.scene.ray_cast(depsgraph, origin=ray_origin, direction=view_vector)
+
+    
     points = {"vertices":[], "edges":[], "face":[]}
     normals = {"vertices":[], "edges":[], "face":[]}
     
-    if RESULT:
+    if Result:
         temp_cursor_pos = GetCursorPosition()
         if Is_EditMesh():
-            if not OBJECT in SpawnCursorByRaycast.objects:
-                OBJECT.update_from_editmode()
-                SpawnCursorByRaycast.objects.append(OBJECT)
+            if not Object in SpawnCursorByRaycast.objects:
+                Object.update_from_editmode()
+                SpawnCursorByRaycast.objects.append(Object)
 
         lengthest_edge = [gv0,gv0]
         vectors = []
-        for e in OBJECT.data.polygons[INDEX].edge_keys:
-                v1 = OBJECT.data.vertices[e[0]]
-                v2 = OBJECT.data.vertices[e[1]]
+        for e in Object.data.polygons[Index].edge_keys:
+                v1 = Object.data.vertices[e[0]]
+                v2 = Object.data.vertices[e[1]]
                 # Append element directions for transform orientation, Translate wrld normal to local because function gizmo use local coordinates    
-                normals["vertices"].append(MATRIX.to_3x3() @ v1.normal)
-                normals["vertices"].append(MATRIX.to_3x3() @ v2.normal)
-                normals["edges"].append(((MATRIX @ v1.co) - (MATRIX @ v2.co)).normalized())
+                normals["vertices"].append(Matrix_.to_3x3() @ v1.normal)
+                normals["vertices"].append(Matrix_.to_3x3() @ v2.normal)
+                normals["edges"].append(((Matrix_ @ v1.co) - (Matrix_ @ v2.co)).normalized())
 
                 # Append element position for pivot point
 
-                v1 = MATRIX @ v1.co
-                v2 = MATRIX @ v2.co
+                v1 = Matrix_ @ v1.co
+                v2 = Matrix_ @ v2.co
                 edge = (v1 + v2)/2
                 points["vertices"].append(v1)
                 points["vertices"].append(v2)
@@ -362,12 +384,12 @@ def SpawnCursorByRaycast(mouse_position, event, set_poisition = False, set_orien
                 lengthest_edge = [v1,v2] if (v1 - v2).length > (lengthest_edge[0] - lengthest_edge[1]).length else lengthest_edge
 
         # append face normal
-        normals["face"].append(NORMAL)
+        normals["face"].append(Normal)
         # append center of face
         center = sum(vectors, mathutils.Vector()) / len(vectors)
         points["face"].append(center)
         # get index the closest element to mouse
-        closest_key, closest_pivot, closest_index = find_closest_vector(points, LOCATION)
+        closest_key, closest_pivot, closest_index = find_closest_vector(points, Location)
         closest_normal = normals[closest_key][closest_index]
         matrix = Matrix()
         if set_orientation:
@@ -457,6 +479,9 @@ class Headers():
     def RotationStepOn(self, context):
         layout = self.layout
         layout.label(text="Step Rotation Off", icon="EVENT_SHIFT")
+    def StepRotation(self, context):
+        layout = self.layout
+        layout.label(text="Decrease Snapping Step", icon="EVENT_SHIFT")
 
 
 class ShaderUtility():
@@ -943,17 +968,19 @@ class ShaderUtility():
         # batch = batch_for_shader(shader, 'LINES', {"pos": [povit, self.Matrix.col[2].to_3d()*2+povit]})
         # batch.draw(shader)
 
-    def BatchSelectOrientation(self, radius=RingRadius, offset=RingWidth, is_draw=False):
+    def BatchSelectOrientation(self, radius=RingRadius, offset=RingWidth, is_draw=False, pos=None):
         shader = gpu.shader.from_builtin('UNIFORM_COLOR')
         gpu.state.blend_set("ALPHA")
         batch = batch_for_shader(shader, 'TRIS', {"pos": [gv0,gv0,gv0]})
 
         ring_faces, outer_contour, inner_contour = self.ShapeRing(V((1,1,1)), radius, offset)
+        
+        if pos != None:
+            ring_faces = [(i - self.Pivot) + pos for i in ring_faces]
 
         batch = batch_for_shader(shader, 'TRIS', {"pos": ring_faces})
         shader.uniform_float("color", (0.8 ,0.7, 0.0, 0.8))
         batch.draw(shader)
-    
 
         # shader = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
         # shader.uniform_float("lineWidth", 1)
@@ -966,6 +993,32 @@ class ShaderUtility():
         # batch = batch_for_shader(shader, 'LINES', {"pos": inner_contour})
         # batch.draw(shader)
 
+    def BatchRotationSnap(self, point_a, point_b):
+        view_dir = GetViewDirection()
+        line_dir = (point_a - point_b).normalized()
+        cross_lines_dir = view_dir.cross(line_dir)
+
+        # 2 perpendicular lines meanings the end and beginning of the sniping line
+        end_line = []
+        end_line.append(cross_lines_dir * 0.5 + point_a)
+        end_line.append(cross_lines_dir * -0.5 + point_a)
+        start_line = []
+        start_line.append(cross_lines_dir * 0.5 + point_b)
+        start_line.append(cross_lines_dir * -0.5 + point_b)
+
+        lines = start_line + end_line
+        self.ViewSize(lines)
+
+        lines = ([point_a, point_b] + lines)
+
+        
+        shader = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+        shader.uniform_float("lineWidth", 1)
+        shader.uniform_float("viewportSize", (bpy.context.area.width, bpy.context.area.height))
+
+        shader.uniform_float("color", (0.8 ,0.7, 0.0, 1.0))
+        batch = batch_for_shader(shader, 'LINES', {"pos": lines})
+        batch.draw(shader)
 
 class UserSettings():
     def __init__(self):
@@ -1105,6 +1158,7 @@ class AdvancedTransform(bpy.types.Operator):
 
         self.Use_Temporary_Pivot = False
         self.Use_Temporary_Orientation = False
+        self.__position_for_orientation = None
         self.DrawGizmo = True
 
         self.ActionsState = ActionsState()
@@ -1219,13 +1273,15 @@ class AdvancedTransform(bpy.types.Operator):
 
     def PovitDriver3D(self, event, pivot=False, orientation=False):
         """Use inside 'Before' finction with super()"""
-        self.__position_for_orientation, rotation = SpawnCursorByRaycast(self.OldMousePos, event, set_poisition=pivot, set_orientation=orientation)
-        if self.__position_for_orientation!= None:
+        pos , rotation = SpawnCursorByRaycast(self.OldMousePos, event, set_poisition=pivot, set_orientation=orientation)
+        if pos != None:
+            self.__position_for_orientation = pos
             if pivot:
                 bpy.context.scene.tool_settings.transform_pivot_point = 'CURSOR'
                 bpy.context.scene.tool_settings.snap_target = 'CENTER'
             if orientation:
                 bpy.context.scene.transform_orientation_slots[0].type = 'CURSOR'
+        return pos , rotation
         #self.GetMainData()
 
 
@@ -1689,6 +1745,13 @@ class AdvancedRotation(AdvancedTransform):
         self.NormalIntersectionPlane = gvz
         self.RotationDirection = gvz
 
+        self.Is_Constrain_Rotation = False
+        self.Is_Step_Rotation = False
+        self.Is_Snapping_Mode = False
+
+        self.SecondPointForSnaping = None
+        self.SnapPoint = None
+
         self.LM_D = lambda event: self.CallAction(event, self.AfterLeftMouseAction, self.BedoreLeftMouseAction) # need for remove delay
         if not bool(get_addon_preferences().SwapMBForRotation):
             self.If_LM_Cond = lambda event: self.If_LM(event)
@@ -1718,6 +1781,12 @@ class AdvancedRotation(AdvancedTransform):
             pivot = self.PivotPoint
             self.ShaderUtility.BatchRotation(start_direction, normal, angle, pivot, self.NewMousePos)
 
+            if self.Is_Snapping_Mode:
+                self.ShaderUtility.BatchRotationSnap(self.PivotPoint, self.SecondPointForSnaping)
+
+            if self.SnapPoint != None:
+                self.ShaderUtility.BatchSelectOrientation(0.075, 0.05, pos=self.SnapPoint)
+
     def DrawCallBack2D(self, context):
         super().DrawCallBack2D(context)
         if self.NewMousePos.length != 0:
@@ -1745,11 +1814,14 @@ class AdvancedRotation(AdvancedTransform):
         return self.ORI.FINISHED
         
     def AfterLeftMouseAction(self, event):
-        if event.value == 'PRESS':
-            self.InitialRotation(event)
-            return self.ORI.RUNNING_MODAL
-        elif event.value == 'RELEASE':
-            return self.ORI.FINISHED
+        if self.Is_Constrain_Rotation == False:
+            if event.value == 'PRESS':
+                self.InitialRotation(event)
+                self.SetHeader(Headers.StepRotation)
+                self.Is_Step_Rotation = True
+                return self.ORI.RUNNING_MODAL
+            elif event.value == 'RELEASE':
+                return self.ORI.FINISHED
 
     def AfterRightMouseAction(self, event):
         SetConstarin.SetRotationOnly(self.ViewAxisInMatrix)
@@ -1757,30 +1829,42 @@ class AdvancedRotation(AdvancedTransform):
     
     @is_3d_required 
     @is_edit_mesh
+    def InitialConstrainRotation(self, event): 
+        self.Is_Constrain_Rotation = True
+        self.ActionsState.Ctrl = True
+        self.InitialRotation(event) 
+        self.SetHeader(Headers.RotationStepOn)
+        self.obj = bpy.context.active_object
+        self.bm = bmesh.from_edit_mesh(self.obj.data)
+        self.SelectedVertices = [v for v in self.bm.verts if v.select]
+        pos_selected_vertices = [self.obj.matrix_world @ v.co.copy() for v in self.SelectedVertices]
+
+        self.BaseNormal = MakeCustomTransformOrientation().col[2].to_3d()
+        self.PlaneNormal = self.BaseNormal.copy()
+        self.BaseOrigin = sum(pos_selected_vertices, V()) / len(pos_selected_vertices)
+
+    @is_3d_required 
+    @is_edit_mesh
     def BeforeCtrlAction(self, event):
         if self.StartDrawVector is None:
             self.OldMousePos = self.GML(event)
           
-    @is_3d_required 
-    @is_edit_mesh
+    @is_3d_required
     def AfterCtrlAction(self, event):
-        if event.type == "LEFT_CTRL" and event.value == "PRESS" and self.ActionsState.Ctrl == False:
-            self.ActionsState.Ctrl = True
-            self.InitialRotation(event) 
-            self.SetHeader(Headers.RotationStepOn)
-            self.obj = bpy.context.active_object
-            self.bm = bmesh.from_edit_mesh(self.obj.data)
-            self.SelectedVertices = [v for v in self.bm.verts if v.select]
-            # normal_selected_vertices = [self.obj.matrix_world @ v.normal.copy() for v in self.SelectedVertices]
-            pos_selected_vertices = [self.obj.matrix_world @ v.co.copy() for v in self.SelectedVertices]
+        if_ctlr_press = lambda event: event.type == "LEFT_CTRL" and event.value == "PRESS" 
+        if_ctlr_release = lambda event: event.type == "LEFT_CTRL" and event.value == "RELEASE" 
 
-            self.BaseNormal = MakeCustomTransformOrientation().col[2].to_3d()
-            self.PlaneNormal = self.BaseNormal.copy()
-            self.BaseOrigin = sum(pos_selected_vertices, V()) / len(pos_selected_vertices)
+        if Is_EditMesh():
+            if if_ctlr_press(event) and self.Is_Step_Rotation == False and self.StartDrawVector == None: # if we want to use Constrain Rotation
+                self.InitialConstrainRotation(event)
 
-        if event.type == "LEFT_CTRL" and event.value == "RELEASE" and self.ActionsState.Ctrl == True:
-            self.bm.free()
-            return self.ORI.FINISHED
+            if if_ctlr_release(event) and self.Is_Constrain_Rotation == True:         # Exit From Constrain Rotation
+                self.bm.free()
+                return self.ORI.FINISHED
+            
+        
+
+
 
         return self.ORI.RUNNING_MODAL
 
@@ -1788,30 +1872,59 @@ class AdvancedRotation(AdvancedTransform):
         self.NewMousePos = self.GML(event)
 
     def AfterMoveMouseAction(self, event):
-        bpy.context.area.tag_redraw()
-        angle = self.LastAngle.angle(self.GetDirection(self.NewMousePos))
-        angle = math.degrees(angle)
-        self.Rotatate(angle)
+        if not self.Is_Snapping_Mode:
+            bpy.context.area.tag_redraw()
+            angle = self.LastAngle.angle(self.GetDirection(self.NewMousePos))
+            angle = math.degrees(angle)
+            self.Rotation(angle)
+        else:
+            self.SnapRotation(event)
         return self.ORI.RUNNING_MODAL
 
-    def BeforeShiftAction(self, event):
-        if self.ActionsState.MoveMouse == False:
+    def ChengeStepRotation(self, step_value):
+        angle = (self.RotationValue % step_value)
+        angle = step_value - angle if angle > step_value / 2 else angle * -1
+        
+        self.Rotation(angle)
+        self.AngleSnappingStep = step_value
+
+    def GetPointToSnap(self, event):
+        pass
+
+    def BeforeShiftAction(self, event): # ⇧
+        if_shift_press = lambda event: event.type == "LEFT_SHIFT" and event.value == "PRESS" 
+        if_shift_release = lambda event: event.type == "LEFT_SHIFT" and event.value == "RELEASE" 
+    
+        if self.Is_Step_Rotation == False and self.Is_Constrain_Rotation == False:
             super().BeforeShiftAction(event)
         else:
             self.If_Shift_Cond = lambda event:  event.type == "LEFT_SHIFT" and event.value == "PRESS"
-            if self.AngleSnappingStep == 1:
+            if self.Is_Constrain_Rotation == True and self.Is_Step_Rotation==False: # Enable\Disable Step for constrain rotation
+                if self.AngleSnappingStep == 1:
+                    self.SetHeader(Headers.RotationStepOn)
+                    step_value = int(get_addon_preferences().Snapping_Step)
+                    self.ChengeStepRotation(step_value)
+                else: 
+                    self.SetHeader(Headers.RotationStepOff)
+                    self.AngleSnappingStep = 1
+                return self.ORI.RUNNING_MODAL
+            elif False: 
+                if self.Is_Step_Rotation == True and self.Is_Constrain_Rotation == False:
+                    pos, mat = self.PovitDriver3D(event)
+                    if not pos is None:
+                        self.SecondPointForSnaping = pos
+                        self.Is_Snapping_Mode = True
+                        if self.RotationValue != 0:
+                            self.Rotation(self.RotationValue)
+                        self.LastAngle = None
+                        bpy.context.region.tag_redraw()
+
+            if if_shift_press(event) and self.ActionsState.MoveMouse and self.StartDrawVector != None and self.Is_Step_Rotation == True: # if we use step rotation and ctrl on
+                step_value = int(get_addon_preferences().DecreaseSnapping_Step)
+                self.ChengeStepRotation(step_value)
+            if if_shift_release(event) and self.ActionsState.MoveMouse and self.StartDrawVector != None and self.Is_Step_Rotation == True: # if we use step rotation and ctrl off
                 step_value = int(get_addon_preferences().Snapping_Step)
-                self.SetHeader(Headers.RotationStepOn)
-                # Compensation rotation for step round
-                angle = (self.RotationValue % step_value)
-                angle = step_value - angle if angle > step_value / 2 else angle * -1
-                
-                self.Rotatate(angle)
-                self.AngleSnappingStep = step_value
-            else: 
-                self.SetHeader(Headers.RotationStepOff)
-                self.AngleSnappingStep = 1
-            return self.ORI.RUNNING_MODAL
+                self.ChengeStepRotation(step_value)
 
 
     def RotationConstrain(self):
@@ -1821,11 +1934,11 @@ class AdvancedRotation(AdvancedTransform):
                 v.co = self.obj.matrix_world.inverted() @ intersection
                 bmesh.update_edit_mesh(self.obj.data)
 
-    def Rotatate(self, angle):
+    def Rotation(self, angle):
         # Check rotation step
         if (angle != None and (round(angle / self.AngleSnappingStep) * self.AngleSnappingStep) != 0) or self.AngleSnappingStep == 1:
             if self.AngleSnappingStep != 1:
-                angle = self.AngleSnappingStep
+                angle = round(angle / self.AngleSnappingStep) * self.AngleSnappingStep
             else:
                 angle = round(angle)
             
@@ -1842,11 +1955,27 @@ class AdvancedRotation(AdvancedTransform):
             # Rotate self.OldMousePos to current rotation
             self.OldMousePos = self.NewMousePos.copy()
             self.LastAngle = self.LastAngle @ rotate(angle)
-            if self.ActionsState.LeftMouse:
+            if self.Is_Step_Rotation:
                 SetConstarin.SetRotationOnlyAT(angle*-1 , self.ViewAxisInMatrix)
-            elif self.ActionsState.Ctrl:
+            elif self.Is_Constrain_Rotation:
                 self.PlaneNormal = self.PlaneNormal @ rotate(angle)
                 self.RotationConstrain()
+
+    def SnapRotation(self, event):
+        pos, mat = self.PovitDriver3D(event)
+        if not pos is None and (pos - self.__position_for_orientation).length != 0.0:
+            self.SnapPoint = pos
+            bpy.context.region.tag_redraw()
+            proj_vec = intersect_line_plane(self.SnapPoint, self.NormalIntersectionPlane + self.SnapPoint, self.PivotPoint, self.NormalIntersectionPlane)
+            if not proj_vec is None:
+                v1 = self.GetDirection(proj_vec)
+                v2 = self.GetDirection(self.SecondPointForSnaping)
+                angle = v1.angle(v2)
+                if self.LastAngle != None:
+                    SetConstarin.SetRotationOnlyAT(self.LastAngle*-1 , self.ViewAxisInMatrix)
+                if self.LastAngle == None:
+                    self.LastAngle = angle
+                SetConstarin.SetRotationOnlyAT(angle , self.ViewAxisInMatrix)
 
 addon_keymaps = []
 
@@ -1931,17 +2060,31 @@ class AdvancedTransformPref(bpy.types.AddonPreferences):
                ('90', "90", "")
                ],
         description="",
+        name="Increase Rotation Snapping Step",
+        default='15',)
+    IncreaseSnapping_Step: EnumProperty(
+        items=[('5', "5", ""),
+               ('10', "10", ""),
+               ('15', "15", ""),
+               ('30', "30", ""),
+               ('45', "45", ""),
+               ('90', "90", "")
+               ],
+        description="",
         name="Rotation Snapping Step",
-        default='15',
-        # update=use_cashes
-        # caches_valid = True
-    ) # type: ignore
-    # Use_Advanced_Transform: BoolProperty(
-    #     name="Use Advanced Transform Rotation",
-    #     default=False,
-    #     description="Is not use standard blender rotation without snapping (left mouse button)."
-    #                 "Standard has great performance.",
-    # )
+        default='45',)
+    DecreaseSnapping_Step: EnumProperty(
+        items=[('5', "5", ""),
+               ('10', "10", ""),
+               ('15', "15", ""),
+               ('30', "30", ""),
+               ('45', "45", ""),
+               ('90', "90", "")
+               ],
+        description="",
+        name="Decrease Rotation Snapping Step",
+        default='5',)
+
 
     MultiAxisDrag: BoolProperty(
         name="Multi Axis Drag (BETA)",
@@ -1958,6 +2101,11 @@ class AdvancedTransformPref(bpy.types.AddonPreferences):
         default=False,
         description="Auto Enable Spaning For Move After Using Temporary Pivot",
     )
+    LocalObjRayTrace: BoolProperty(
+        name="Priority RayTrace to Selection",
+        default=False,
+        description="Selected objects will have the highest priority for RayTrace(Temporary Pivot\Orientation)",
+    )
 
 
     def draw(self, context):
@@ -1968,11 +2116,15 @@ class AdvancedTransformPref(bpy.types.AddonPreferences):
         row3 = box0.row()
         row4 = box0.row()
         row5 = box0.row()
+        row6 = box0.row()
+        row7 = box0.row()
         row1.prop(self, "Snapping_Step")
-        # row2.prop(self, "Use_Advanced_Transform")
-        row3.prop(self, "MultiAxisDrag")
-        row4.prop(self, "SwapMBForRotation")
-        row5.prop(self, "AutoEnableSpanForMoveAfterTemporaryPivot")
+        #row2.prop(self, "IncreaseSnapping_Step")
+        row3.prop(self, "DecreaseSnapping_Step")
+        row4.prop(self, "LocalObjRayTrace")
+        row5.prop(self, "MultiAxisDrag")
+        row6.prop(self, "SwapMBForRotation")
+        row7.prop(self, "AutoEnableSpanForMoveAfterTemporaryPivot")
         # ---------------------------------
         box = layout.box()
         split = box.split()
@@ -2097,7 +2249,6 @@ def unregister():
     for c in reversed(classes):
         bpy.utils.unregister_class(c)
     remove_hotkey()
-
 
 if __name__ == "__main__":
     register()
