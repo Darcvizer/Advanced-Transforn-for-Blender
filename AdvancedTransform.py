@@ -63,6 +63,7 @@ def is_edit_mesh(func):
     return wrapper
 
 def GetCursorPosition(region = False):
+    """Return cursor position if 'refion == True' return postion in region space"""
     if Is_3d():
         return bpy.context.scene.cursor.location.to_3d().copy()
     else: 
@@ -151,7 +152,12 @@ def GetPivotPointPoistion():
 
     original_cursore_position = GetCursorPosition()
 
-    bpy.ops.view3d.snap_cursor_to_active() if condition('ACTIVE_ELEMENT') else SetCursorToSelection()
+    if condition('ACTIVE_ELEMENT'):
+        if CheckSelection(check_active=True):
+            bpy.ops.view3d.snap_cursor_to_active()
+        else: SetCursorToSelection()
+    else: SetCursorToSelection()
+
     new_pivot_point = GetCursorPosition(region=True)
     SetCursorPosition(original_cursore_position)
     return GetCursorPosition(region=True) if condition('CURSOR') else new_pivot_point
@@ -187,6 +193,12 @@ def GetTransfromOrientationMatrix():
         matrix_transform_orientation = MakeCustomTransformOrientation(use_view=True)
     elif condition('CURSOR'):
         matrix_transform_orientation = bpy.context.scene.cursor.matrix.copy()
+    elif condition('PARENT'):
+        parent = bpy.context.active_object.parent
+        if parent != None:
+            matrix_transform_orientation = parent.matrix_world
+        else:
+            matrix_transform_orientation = Matrix()
     else:
         matrix_transform_orientation = bpy.context.scene.transform_orientation_slots[0].custom_orientation.matrix.copy()
     return matrix_transform_orientation.copy()
@@ -423,6 +435,21 @@ def QuickMoveToMouse(mouse_position):
     SetCursorPosition(mouse_position)
     bpy.ops.view3d.snap_selected_to_cursor(use_offset=True)
     SetCursorPosition(temp_cursor_pos)
+
+def CheckSelection(check_active = False):
+    """If something selected cursor chenge position"""
+    rand_pos = V((-51651556780912,51651651651,0))
+    selections = False
+    CL = GetCursorPosition()
+    SetCursorPosition(rand_pos)
+    if check_active:
+        bpy.ops.view3d.snap_cursor_to_active()
+    else:
+        SetCursorToSelection()
+    if GetCursorPosition() != rand_pos: selections = True
+    SetCursorPosition(CL)
+    return selections
+
 
 #------------------Utulity------------------------#
 
@@ -1540,20 +1567,11 @@ class AdvancedTransform(bpy.types.Operator):
         
         return self.ORI.RUNNING_MODAL
 
-    def CheckSelection(self):
-        """If something selected cursor chenge position"""
-        rand_pos = V((-51651556780912,51651651651,0))
-        selections = False
-        CL = GetCursorPosition()
-        SetCursorPosition(rand_pos)
-        SetCursorToSelection()
-        if GetCursorPosition() != rand_pos: selections = True
-        SetCursorPosition(CL)
-        return selections
+
 
     def invoke(self, context, event):
         self.SetUp(event)
-        if self.CheckSelection():  
+        if CheckSelection():  
             context.window_manager.modal_handler_add(self)
             return self.ORI.RUNNING_MODAL
         else: 
@@ -2041,6 +2059,55 @@ class AdvancedRotation(AdvancedTransform):
                     self.LastAngle = angle
                 SetConstarin.SetRotationOnlyAT(angle , self.ViewAxisInMatrix)
 
+class AdvancedGhostGizmo(bpy.types.Operator):
+
+    bl_idname = "view3d.ghost_gizmo"
+    bl_label = "Ghost Gizmo"
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == "VIEW_3D"
+    
+    def DrawGizmo(self, context):
+        if self.There_Is_Select:
+            self.shader_util.UpdateData(self.matrix,  self.pivot, 2)
+            self.shader_util.BatchGizmo3D(GetBestAxisInMatrix(self.matrix,GetViewDirection()))
+            
+    def modal(self, context, event):
+        if not bpy.context.scene.draw_ghost_gizmo:
+            try:
+                if Is_3d():
+                    bpy.types.SpaceView3D.draw_handler_remove(self._handle_3d, 'WINDOW')
+                    bpy.context.region.tag_redraw()
+            except:
+                pass
+            return ORI.FINISHED
+
+        self.There_Is_Select = CheckSelection()
+        if self.There_Is_Select: 
+            self.pivot = GetPivotPointPoistion()
+            self.matrix = GetTransfromOrientationMatrix()
+
+        bpy.context.region.tag_redraw()
+
+        return ORI.PASS_THROUGH
+
+
+    def invoke(self, context, event):
+        bpy.context.scene.draw_ghost_gizmo = not bpy.context.scene.draw_ghost_gizmo
+        deb(bpy.context.scene.draw_ghost_gizmo, "draw_ghost_gizmo")
+        if bpy.context.scene.draw_ghost_gizmo:
+            self.rand_pos = V((-51651556780912,51651651651,0))
+            self.shader_util = ShaderUtility(Matrix(), gv0, 2)
+            self.There_Is_Select = False
+            self.pivot = V()
+            self.matrix = Matrix()
+            self._handle_3d = bpy.types.SpaceView3D.draw_handler_add(self.DrawGizmo, (context, ), 'WINDOW','POST_VIEW')
+            context.window_manager.modal_handler_add(self)
+            return ORI.RUNNING_MODAL
+        else:
+            return ORI.CANCELLED
+
 addon_keymaps = []
 
 def get_addon_preferences():
@@ -2301,18 +2368,91 @@ class SetConstarin():
     def SetMoveExcludeUV():
         bpy.ops.transform.translate('INVOKE_DEFAULT', constraint_axis=(True, True, False))
 
+
+def DrawGhostGizmo():
+    if Is_3d() and bpy.types.Scene.draw_ghost_gizmo:
+        if not hasattr(DrawGhostGizmo, 'timer'):
+            DrawGhostGizmo.timer = 0
+        if DrawGhostGizmo.timer == 2:
+            # rand_pos = V((-51651556780912,51651651651,0))
+            # selections = False
+            # povit = V()
+            # CL = GetCursorPosition()
+            # SetCursorPosition(rand_pos)
+            #SetCursorToSelection()
+            
+            # povit = GetCursorPosition()
+            # if povit != rand_pos: selections = True; 
+            # SetCursorPosition(CL)
+            # if selections:
+            #     matrix  = GetTransfromOrientationMatrix()
+            #     if not hasattr(DrawGhostGizmo, 'shader_utility'): 
+            #         DrawGhostGizmo.shader_utility = ShaderUtility(matrix, povit, 2)
+            #     else:
+            #         DrawGhostGizmo.shader_utility.UpdateData(matrix, povit, 2)
+            #         DrawGhostGizmo.shader_utility.BatchGizmo3D(GetBestAxisInMatrix(matrix,GetViewDirection()))
+
+            # if not hasattr(DrawGhostGizmo, 'shader_utility'): 
+            #     DrawGhostGizmo.shader_utility = ShaderUtility(Matrix(), V((0,0,0)), 2)
+            # else:
+            #     matrix  = GetTransfromOrientationMatrix()
+            #     DrawGhostGizmo.shader_utility.UpdateData(matrix,  V((0,0,0)), 2)
+            #     DrawGhostGizmo.shader_utility.BatchGizmo3D(GetBestAxisInMatrix(matrix,GetViewDirection()))
+            DrawGhostGizmo.timer = 0
+        else:
+            DrawGhostGizmo.timer += 1
+
+
+def GostGuzmoDrawButton(self, context):
+    button = self.layout.row()
+    button.operator("view3d.ghost_gizmo", text="", icon='AXIS_TOP',emboss=True, depress=bpy.context.scene.draw_ghost_gizmo)
+    # button.active = bpy.context.scene.draw_ghost_gizmo
+
+
+    # SetCursorToSelection()
+    # if button.active:
+    #     if not hasattr(GostGuzmoDrawButton, 'draw_gizmo'): 
+    #         GostGuzmoDrawButton.draw_gizmo = None
+    #         deb("create")
+    #     if hasattr(GostGuzmoDrawButton, 'draw_gizmo'):
+    #         deb("Go to draw")
+    #         if GostGuzmoDrawButton.draw_gizmo == None:
+    #             deb("Draw")
+    #             GostGuzmoDrawButton.draw_gizmo = bpy.types.SpaceView3D.draw_handler_add(DrawGhostGizmo, (), 'WINDOW', 'POST_VIEW')
+    # if not button.active and hasattr(GostGuzmoDrawButton, 'draw_gizmo') and GostGuzmoDrawButton.draw_gizmo != None:
+    #     try:
+    #         deb("remove")
+    #         bpy.types.SpaceView3D.draw_handler_remove(GostGuzmoDrawButton.draw_gizmo, 'WINDOW')
+    #         GostGuzmoDrawButton.draw_gizmo = None
+    #     except:
+    #         pass
+
+
+
+
+
+
 classes = (AdvancedMove, AdvancedScale, AdvancedRotation,
-           AdvancedTransformPref, AdvancedScaleZero, AdvancedScaleMirror, AdvancedTransform_Add_Hotkey)
+           AdvancedTransformPref, AdvancedScaleZero, AdvancedScaleMirror, AdvancedGhostGizmo, AdvancedTransform_Add_Hotkey)
 
 def register():
     for c in classes:
         bpy.utils.register_class(c)
     add_hotkey()
 
+    bpy.types.Scene.draw_ghost_gizmo = BoolProperty(
+    name="",
+    description="",
+    default = False,)
+    bpy.types.VIEW3D_MT_editor_menus.append(GostGuzmoDrawButton)
+
 def unregister():
     for c in reversed(classes):
         bpy.utils.unregister_class(c)
     remove_hotkey()
+
+    bpy.types.VIEW3D_MT_editor_menus.remove(GostGuzmoDrawButton)
+    del bpy.types.Scene.draw_ghost_gizmo
 
 if __name__ == "__main__":
     register()
