@@ -38,9 +38,16 @@ RingWidth = 0.25
 RingRadius = 1
 AxisColor = lambda axis, alpha=0.3 : (0.8, 0.2, 0.2, alpha) if axis == 0 else ((0.1, 0.6, 0.1, alpha) if axis == 1 else ((0.0, 0.3, 0.6, alpha) if axis == 2 else (1, 1, 1, alpha)))
 Is_EditMesh = lambda: bpy.context.mode == 'EDIT_MESH'
-Is_3d = lambda: bpy.context.space_data.type == "VIEW_3D"
+Is_3d = lambda:  bpy.context.space_data.type == "VIEW_3D"
 Is_3d_var = None
 """Need in cases like filling header whne current context isn't 3d"""
+
+# def Is_3d():
+#     try:
+#         return bpy.context.space_data.type == "VIEW_3D"
+#     except:
+#         True
+    
 
 def is_3d_required(func):
     def wrapper(self, *args, **kwargs):
@@ -1926,7 +1933,7 @@ class AdvancedRotation(AdvancedTransform):
                 # bpy.context.region.tag_redraw()
                 #self.If_Ctrl_Cond = lambda event: event.ctrl
                 deb("LEFT_CTRL")
-                self.Rotation(self.RotationValue*-1)
+                self.Rotation(self.RotationValue if self.RotationValue < 0 else self.RotationValue*-1)
                 self.StartDrawVector = gv0
                 #self.ActionsState.MoveMouse = False
                 self.Is_SelectAxis = True
@@ -2073,14 +2080,23 @@ class AdvancedGhostGizmo(bpy.types.Operator):
             self.shader_util.UpdateData(self.matrix,  self.pivot, 2)
             self.shader_util.BatchGizmo3D(GetBestAxisInMatrix(self.matrix,GetViewDirection()))
             
+    def Exit(self):
+        try:
+            bpy.types.SpaceView3D.draw_handler_remove(self._handle_3d, 'WINDOW')
+            bpy.context.region.tag_redraw()
+        except:
+            pass
+
+    
     def modal(self, context, event):
+        if context.space_data is None:
+            self.There_Is_Select = False
+            bpy.context.scene.draw_ghost_gizmo = False
+            self.Exit()
+            return ORI.CANCELLED
+        
         if not bpy.context.scene.draw_ghost_gizmo:
-            try:
-                if Is_3d():
-                    bpy.types.SpaceView3D.draw_handler_remove(self._handle_3d, 'WINDOW')
-                    bpy.context.region.tag_redraw()
-            except:
-                pass
+            self.Exit()
             return ORI.FINISHED
 
         self.There_Is_Select = CheckSelection()
