@@ -1180,8 +1180,8 @@ class AdvancedTransform(bpy.types.Operator):
     bl_idname = "transform.advancedtransform"
     bl_label = "Advanced Transform"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         global Is_3d_var
         Is_3d_var = Is_3d()
         self.Toolname = "BaseClass"
@@ -1591,8 +1591,8 @@ class AdvancedMove(AdvancedTransform):
     bl_idname = "transform.advanced_move"
     bl_label = "Advanced Move"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.toolName = "Advanced Move"
         self._header = Headers.MoveHeader
 
@@ -1658,8 +1658,8 @@ class AdvancedScale(AdvancedTransform):
     bl_idname = "transform.advanced_scale"
     bl_label = "Advanced Scale"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._header = Headers.ScaleHeader
         self.Toolname = "Advanced Scale"
 
@@ -1703,8 +1703,8 @@ class AdvancedScaleMirror(AdvancedTransform):
     bl_idname = "transform.advanced_scale_mirror"
     bl_label = "Advanced Scale Mirror"
     bl_options = {'REGISTER', 'UNDO'}
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.Toolname = "Scale Mirror"
         self._header = None
         self.CurrentAxisForMirror = None
@@ -1765,8 +1765,8 @@ class AdvancedScaleZero(AdvancedScaleMirror):
     bl_idname = "transform.advanced_scale_zero"
     bl_label = "Advanced Scale zero"
     bl_options = {'REGISTER', 'UNDO'}
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.Toolname = "Scale Zero"
         self._header = None
         self.If_Spcae_Cond = lambda event: False
@@ -1783,8 +1783,8 @@ class AdvancedRotation(AdvancedTransform):
     bl_label = "Advanced Rotation"
     bl_options = {'REGISTER', 'UNDO'}
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._header = Headers.RotationHeader
         self.ToolName = 'Advanced Rotation'
         self.RotationValue = 0.0
